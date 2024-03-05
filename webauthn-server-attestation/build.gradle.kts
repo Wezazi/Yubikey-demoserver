@@ -45,13 +45,7 @@ dependencies {
   testImplementation("org.scalatest:scalatest_2.13")
   testImplementation("org.scalatestplus:junit-4-13_2.13")
   testImplementation("org.scalatestplus:scalacheck-1-16_2.13")
-
-  testImplementation("org.slf4j:slf4j-api") {
-    version {
-      strictly("[1.7.25,1.8-a)") // Pre-1.8 version required by slf4j-test
-    }
-  }
-  testRuntimeOnly("uk.org.lidalia:slf4j-test")
+  testImplementation("org.slf4j:slf4j-api")
 }
 
 val integrationTest = task<Test>("integrationTest") {
