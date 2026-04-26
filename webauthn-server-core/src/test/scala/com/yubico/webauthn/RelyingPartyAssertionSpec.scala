@@ -191,9 +191,7 @@ class RelyingPartyAssertionSpec
       signature: ByteArray = Defaults.signature,
       userHandleForResponse: Option[ByteArray] = Some(Defaults.userHandle),
       userHandleForRequest: Option[ByteArray] = None,
-      userHandleForUser: ByteArray = Defaults.userHandle,
       usernameForRequest: Option[String] = Some(Defaults.username),
-      usernameForUser: String = Defaults.username,
       userVerificationRequirement: UserVerificationRequirement =
         UserVerificationRequirement.PREFERRED,
       validateSignatureCounter: Boolean = true,
@@ -250,7 +248,7 @@ class RelyingPartyAssertionSpec
                   RegisteredCredential
                     .builder()
                     .credentialId(credId)
-                    .userHandle(userHandleForUser)
+                    .userHandle(Defaults.userHandle)
                     .publicKeyCose(credentialPublicKeyBytes)
                     .signatureCount(0)
                     .build()
@@ -264,13 +262,13 @@ class RelyingPartyAssertionSpec
               : Optional[ByteArray] =
             getUserHandleIfDefaultUsername(
               username,
-              userHandle = userHandleForUser,
+              userHandle = Defaults.userHandle,
             )
           override def getUsernameForUserHandle(userHandle: ByteArray)
               : Optional[String] =
             getUsernameIfDefaultUserHandle(
               userHandle,
-              username = usernameForUser,
+              username = Defaults.username,
             )
         }
       )
@@ -676,7 +674,6 @@ class RelyingPartyAssertionSpec
               val steps = finishAssertion(
                 credentialRepository = credentialRepository,
                 userHandleForResponse = Some(nonOwner.userHandle),
-                userHandleForUser = owner.userHandle,
                 usernameForRequest = Some(owner.username),
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
@@ -693,7 +690,6 @@ class RelyingPartyAssertionSpec
               val steps = finishAssertion(
                 credentialRepository = credentialRepository,
                 usernameForRequest = Some(nonOwner.username),
-                userHandleForUser = owner.userHandle,
                 userHandleForResponse = Some(owner.userHandle),
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
@@ -708,7 +704,6 @@ class RelyingPartyAssertionSpec
               val steps = finishAssertion(
                 credentialRepository = credentialRepository,
                 userHandleForResponse = Some(owner.userHandle),
-                userHandleForUser = owner.userHandle,
                 usernameForRequest = Some(owner.username),
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
@@ -726,7 +721,6 @@ class RelyingPartyAssertionSpec
               val steps = finishAssertion(
                 credentialRepository = credentialRepository,
                 usernameForRequest = None,
-                userHandleForUser = owner.userHandle,
                 userHandleForResponse = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
@@ -743,7 +737,6 @@ class RelyingPartyAssertionSpec
               val steps = finishAssertion(
                 credentialRepository = credentialRepository,
                 userHandleForResponse = Some(nonOwner.userHandle),
-                userHandleForUser = owner.userHandle,
                 usernameForRequest = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
@@ -761,7 +754,6 @@ class RelyingPartyAssertionSpec
                 credentialRepository = credentialRepository,
                 userHandleForRequest = Some(nonOwner.userHandle),
                 userHandleForResponse = None,
-                userHandleForUser = owner.userHandle,
                 usernameForRequest = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
@@ -777,7 +769,6 @@ class RelyingPartyAssertionSpec
                 credentialRepository = credentialRepository,
                 userHandleForRequest = None,
                 userHandleForResponse = None,
-                userHandleForUser = owner.userHandle,
                 usernameForRequest = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
@@ -793,7 +784,6 @@ class RelyingPartyAssertionSpec
                 credentialRepository = credentialRepository,
                 userHandleForRequest = Some(owner.userHandle),
                 userHandleForResponse = Some(nonOwner.userHandle),
-                userHandleForUser = owner.userHandle,
                 usernameForRequest = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
@@ -808,7 +798,6 @@ class RelyingPartyAssertionSpec
               val steps = finishAssertion(
                 credentialRepository = credentialRepository,
                 userHandleForResponse = Some(owner.userHandle),
-                userHandleForUser = owner.userHandle,
                 usernameForRequest = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
@@ -823,7 +812,6 @@ class RelyingPartyAssertionSpec
                 credentialRepository = credentialRepository,
                 userHandleForRequest = Some(owner.userHandle),
                 userHandleForResponse = None,
-                userHandleForUser = owner.userHandle,
                 usernameForRequest = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
