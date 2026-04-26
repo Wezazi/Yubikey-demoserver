@@ -290,6 +290,26 @@ class RelyingPartyV2AssertionSpec
             )
           }
         }
+
+        it("Requires usernameRepository to be set if StartAssertionOptions.username is set.") {
+          val rp = RelyingParty
+            .builder()
+            .identity(Defaults.rpId)
+            .credentialRepositoryV2(Helpers.CredentialRepositoryV2.empty)
+            .build()
+
+          val request = Try(
+            rp.startAssertion(
+              StartAssertionOptions
+                .builder()
+                .username(Defaults.username)
+                .build()
+            )
+          )
+
+          request shouldBe a[Failure[_]]
+          request.failed.get shouldBe an[IllegalArgumentException]
+        }
       }
 
     }
