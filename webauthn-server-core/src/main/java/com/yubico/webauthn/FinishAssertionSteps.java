@@ -267,6 +267,19 @@ final class FinishAssertionSteps<C extends CredentialRecord> {
             finalUsername.isPresent(),
             "Unknown username for user handle: %s",
             finalUserHandle.get());
+
+        final Optional<String> credentialUsername =
+            usernameRepository.get().getUsernameForUserHandle(registration.get().getUserHandle());
+        assertTrue(
+            credentialUsername.isPresent(),
+            "Unknown username for credential: %s",
+            response.getId());
+
+        assertTrue(
+            finalUsername.get().equals(credentialUsername.get()),
+            "Username %s does not own credential %s",
+            finalUsername.get(),
+            response.getId());
       }
     }
   }
