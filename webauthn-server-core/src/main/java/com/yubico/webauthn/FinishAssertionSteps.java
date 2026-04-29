@@ -233,54 +233,58 @@ final class FinishAssertionSteps<C extends CredentialRecord> {
           !(request.getUsername().isPresent() && !usernameRepository.isPresent()),
           "Cannot set request username when usernameRepository is not configured.");
 
+      requestedUsername.ifPresent(
+          reqUsername ->
+              assertTrue(
+                  effectiveRequestUserHandle.isPresent(), "Unknown username: %s", reqUsername));
+
+      requestedUserHandle.ifPresent(
+          reqUserHandle -> {
+            if (usernameRepository.isPresent()) {
+              assertTrue(
+                  effectiveRequestUsername.isPresent(), "Unknown user handle: %s", reqUserHandle);
+            }
+          });
+
       assertTrue(
           finalUserHandle.isPresent(),
           "Could not identify user to authenticate: none of requested username, requested user handle or response user handle are set.");
 
-      if (requestedUserHandle.isPresent() && responseUserHandle.isPresent()) {
+      if (usernameRepository.isPresent()) {
         assertTrue(
-            requestedUserHandle.get().equals(responseUserHandle.get()),
-            "User handle set in request (%s) does not match user handle in response (%s).",
-            requestedUserHandle.get(),
-            responseUserHandle.get());
-      }
-
-      if (userHandleDerivedFromUsername && responseUserHandle.isPresent()) {
-        assertTrue(
-            effectiveRequestUserHandle.get().equals(responseUserHandle.get()),
-            "User handle in request (%s) (derived from username: %s) does not match user handle in response (%s).",
-            effectiveRequestUserHandle.get(),
-            requestedUsername.get(),
-            responseUserHandle.get());
+            finalUsername.isPresent(), "Unknown username for user handle: %s", finalUserHandle);
       }
 
       assertTrue(registration.isPresent(), "Unknown credential: %s", response.getId());
+
+      effectiveRequestUserHandle.ifPresent(
+          reqUserHandle -> {
+            final String reqUserHandleDescription =
+                userHandleDerivedFromUsername
+                    ? String.format(
+                        "%s (derived from username: %s)", reqUserHandle, requestedUsername.get())
+                    : reqUserHandle.toString();
+            responseUserHandle.ifPresent(
+                respUserHandle -> {
+                  assertTrue(
+                      reqUserHandle.equals(respUserHandle),
+                      "User handle in request (%s) does not match user handle in response (%s).",
+                      reqUserHandleDescription,
+                      respUserHandle);
+                });
+
+            assertTrue(
+                registration.get().getUserHandle().equals(reqUserHandle),
+                "User handle %s does not own credential %s",
+                reqUserHandleDescription,
+                response.getId());
+          });
 
       assertTrue(
           finalUserHandle.get().equals(registration.get().getUserHandle()),
           "User handle %s does not own credential %s",
           finalUserHandle.get(),
-          response.getId());
-
-      if (usernameRepository.isPresent()) {
-        assertTrue(
-            finalUsername.isPresent(),
-            "Unknown username for user handle: %s",
-            finalUserHandle.get());
-
-        final Optional<String> credentialUsername =
-            usernameRepository.get().getUsernameForUserHandle(registration.get().getUserHandle());
-        assertTrue(
-            credentialUsername.isPresent(),
-            "Unknown username for credential: %s",
-            response.getId());
-
-        assertTrue(
-            finalUsername.get().equals(credentialUsername.get()),
-            "Username %s does not own credential %s",
-            finalUsername.get(),
-            response.getId());
-      }
+          registration.get().getUserHandle());
     }
   }
 
