@@ -32,6 +32,9 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.junit.JUnitRunner
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
+import scala.util.Failure
+import scala.util.Try
+
 @RunWith(classOf[JUnitRunner])
 class BinaryUtilSpec
     extends AnyFunSpec
@@ -203,6 +206,31 @@ class BinaryUtilSpec
       BinaryUtil
         .parseDerLength(Array(0x84, 0, 1, 33, 7).map(_.toByte), 0)
         .result should equal(73991)
+    }
+
+    it("parseDerLength throws IllegalArgumentException for truncated inputs.") {
+      forAll(
+        Gen.chooseNum(0, Int.MaxValue),
+        Arbitrary.arbitrary[Array[Byte]],
+      ) { (len: Int, prefix: Array[Byte]) =>
+        val encoded = BinaryUtil.encodeDerLength(len)
+        val encodedLen = encoded.length
+        (1 to encodedLen) foreach { (i: Int) =>
+          val truncatedLen = encodedLen - i
+
+          val decoded = Try(
+            BinaryUtil.parseDerLength(
+              java.util.Arrays.copyOf(
+                BinaryUtil.concat(prefix, encoded),
+                prefix.length + truncatedLen,
+              ),
+              prefix.length,
+            )
+          )
+          decoded shouldBe a[Failure[_]]
+          decoded.failed.get shouldBe an[IllegalArgumentException]
+        }
+      }
     }
   }
 }

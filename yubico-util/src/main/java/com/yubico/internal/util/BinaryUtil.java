@@ -285,7 +285,7 @@ public class BinaryUtil {
       return new ParseDerResult<>(der[offset] & 0xff, offset + 1);
     } else {
       final int longLen = der[offset] & 0x7f;
-      if (len >= longLen) {
+      if (len >= longLen + 1) {
         switch (longLen) {
           case 0:
             throw new IllegalArgumentException(
