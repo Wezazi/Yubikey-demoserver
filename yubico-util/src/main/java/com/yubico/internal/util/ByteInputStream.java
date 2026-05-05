@@ -36,6 +36,12 @@ public class ByteInputStream extends DataInputStream {
   }
 
   public byte[] read(int numberOfBytes) throws IOException {
+    if (numberOfBytes < 0) {
+      throw new IllegalArgumentException("numberOfBytes must not be negative");
+    }
+    if (numberOfBytes > available()) {
+      throw new IllegalArgumentException("numberOfBytes exceeds remaining input length");
+    }
     byte[] readBytes = new byte[numberOfBytes];
     readFully(readBytes);
     return readBytes;
