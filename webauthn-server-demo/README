@@ -17,13 +17,13 @@ class which provides the REST API on top of it.
 
 == Quick start
 
-  $ ./gradlew run
+  $ ../gradlew run
   $ $BROWSER https://localhost:8443/
 
 Or to run with the https://fidoalliance.org/metadata/[FIDO Metadata Service] as
 a source of attestation metadata:
 
-  $ YUBICO_WEBAUTHN_USE_FIDO_MDS=true ./gradlew run
+  $ YUBICO_WEBAUTHN_USE_FIDO_MDS=true ../gradlew run
   $ $BROWSER https://localhost:8443/
 
 
@@ -135,7 +135,7 @@ environment:
 
 To build and run the demo server via Gradle, run:
 
-  $ ./gradlew run
+  $ ../gradlew run
 
 This will serve the application under `https://localhost:8443/`.
 
