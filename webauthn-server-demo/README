@@ -18,13 +18,13 @@ class which provides the REST API on top of it.
 == Quick start
 
   $ ../gradlew run
-  $ $BROWSER https://localhost:8443/
+  $ $BROWSER http://localhost:8080/
 
 Or to run with the https://fidoalliance.org/metadata/[FIDO Metadata Service] as
 a source of attestation metadata:
 
   $ YUBICO_WEBAUTHN_USE_FIDO_MDS=true ../gradlew run
-  $ $BROWSER https://localhost:8443/
+  $ $BROWSER http://localhost:8080/
 
 
 == Architecture
@@ -137,12 +137,12 @@ To build and run the demo server via Gradle, run:
 
   $ ../gradlew run
 
-This will serve the application under `https://localhost:8443/`.
+This will serve the application under `https://localhost:8080/`.
 
-NOTE: Since WebAuthn requires a HTTPS connection, this demo server uses a dummy
-certificate. This will cause your browser to show a warning, which is safe to
-bypass. The dummy certificate is not included in the `.war` artifact; it is only
-used by the embedded Jetty server and the application distribution archives.
+NOTE: WebAuthn normally requires HTTPS, but makes an exception for `localhost`.
+If you serve the application at some other address, you will need to modify the application
+to include a TLS key and serve the application over a TLS connection.
+These are not included in the demo application.
 
 
 === Configuration

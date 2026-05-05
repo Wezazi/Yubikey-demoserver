@@ -61,7 +61,6 @@ for (task in listOf(tasks.installDist, tasks.distZip, tasks.distTar)) {
   val intoDir = if (task == tasks.installDist) { "/" } else { "${project.name}-${project.version}" }
   task {
     into(intoDir) {
-      from("keystore.jks")
       from("src/main/webapp") {
         into("src/main/webapp")
       }
