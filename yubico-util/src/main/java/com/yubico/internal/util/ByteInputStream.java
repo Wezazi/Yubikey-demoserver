@@ -40,22 +40,4 @@ public class ByteInputStream extends DataInputStream {
     readFully(readBytes);
     return readBytes;
   }
-
-  public byte[] readAll() throws IOException {
-    byte[] readBytes = new byte[available()];
-    readFully(readBytes);
-    return readBytes;
-  }
-
-  public int readInteger() throws IOException {
-    return readInt();
-  }
-
-  public byte readSigned() throws IOException {
-    return readByte();
-  }
-
-  public int readUnsigned() throws IOException {
-    return readUnsignedByte();
-  }
 }
