@@ -1131,7 +1131,7 @@ public final class FidoMetadataDownloader {
                       // FIDO MDS returns it like: `etag: 243`. Try both in case that changes in the
                       // future.
                       et.equals(responseEtag) || String.format("\"%s\"", et).equals(responseEtag))
-              .orElseGet(() -> false)) {
+              .orElse(false)) {
             log.debug("Response ETag matches local ETag - interpreting as not modified.");
             throw new NotModified();
           }
