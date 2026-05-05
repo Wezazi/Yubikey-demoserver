@@ -1122,6 +1122,8 @@ public final class FidoMetadataDownloader {
             httpsConn.getResponseCode(),
             url);
 
+        // As of 2026-05-05, FIDO MDS returns an ETag header even with 429 Too Many Requests status.
+        // We might as well use it when present, even when the status is technically a failure.
         final String responseEtag = httpsConn.getHeaderField("ETag");
         if (responseEtag != null) {
           log.debug("Response ETag: {}", responseEtag);
