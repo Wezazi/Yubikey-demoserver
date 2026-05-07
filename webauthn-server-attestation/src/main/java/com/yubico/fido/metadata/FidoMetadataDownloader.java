@@ -78,6 +78,7 @@ import java.util.Scanner;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -122,6 +123,7 @@ public final class FidoMetadataDownloader {
   @NonNull private final Clock clock;
   private final KeyStore httpsTrustStore;
   private final boolean verifyDownloadsOnly;
+  private final Function<Exception, CachePolicyDecision> cachePolicy;
 
   /** For overriding JSON mapper settings in tests. */
   private final Supplier<ObjectMapper> makeHeaderJsonMapper;
@@ -158,6 +160,8 @@ public final class FidoMetadataDownloader {
     @NonNull private Clock clock = Clock.systemUTC();
     private KeyStore httpsTrustStore = null;
     private boolean verifyDownloadsOnly = false;
+    private Function<Exception, CachePolicyDecision> cachePolicy =
+        (e) -> CachePolicyDecision.USE_CACHED;
 
     private Supplier<ObjectMapper> makeHeaderJsonMapper =
         FidoMetadataDownloader::defaultHeaderJsonMapper;
@@ -182,6 +186,7 @@ public final class FidoMetadataDownloader {
           clock,
           httpsTrustStore,
           verifyDownloadsOnly,
+          cachePolicy,
           makeHeaderJsonMapper,
           makePayloadJsonMapper);
     }
@@ -657,6 +662,40 @@ public final class FidoMetadataDownloader {
       return this;
     }
 
+    /**
+     * Define a policy for how {@link #refreshBlob()} and {@link #loadCachedBlob()} should behave
+     * when a BLOB download fails.
+     *
+     * <p><code>cachePolicy</code> will be invoked when a cached BLOB is available and any attempt
+     * to download, parse and verify a new BLOB fails. Its argument will be the {@link Exception}
+     * that caused the failure. If <code>cachePolicy</code> returns {@link
+     * CachePolicyDecision#USE_CACHED}, then the {@link #refreshBlob()} or {@link #loadCachedBlob()}
+     * invocation will log a warning and return the cached BLOB as a successful result. If <code>
+     * cachePolicy</code> returns {@link CachePolicyDecision#THROW}, then the exception will be
+     * re-thrown and the {@link #refreshBlob()} or {@link #loadCachedBlob()} invocation will fail.
+     *
+     * <p><code>cachePolicy</code> MUST NOT return <code>null</code>.
+     *
+     * <p>When no cached BLOB is available, the exception is automatically re-thrown and <code>
+     * cachePolicy</code> is not invoked.
+     *
+     * <p>See the documentation of {@link #refreshBlob()} and {@link #loadCachedBlob()} for what
+     * kinds of exceptions may be thrown.
+     *
+     * <p>The default policy always returns {@link CachePolicyDecision#USE_CACHED}.
+     *
+     * @param cachePolicy the policy used to decide whether to throw or fall back to cache when a
+     *     BLOB download fails. MUST NOT return <code>null</code>.
+     * @see CachePolicyDecision
+     * @see #refreshBlob()
+     * @see #loadCachedBlob() ()
+     */
+    public FidoMetadataDownloaderBuilder cachePolicy(
+        final Function<Exception, CachePolicyDecision> cachePolicy) {
+      this.cachePolicy = cachePolicy;
+      return this;
+    }
+
     /** For internal testing use only. */
     FidoMetadataDownloaderBuilder headerJsonMapper(
         final Supplier<ObjectMapper> makeHeaderJsonMapper) {
@@ -929,15 +968,25 @@ public final class FidoMetadataDownloader {
       }
     } catch (FidoMetadataDownloaderException e) {
       if (e.getReason() == Reason.BAD_SIGNATURE && cached.isPresent()) {
-        log.warn("New BLOB has bad signature - falling back to cached BLOB.");
-        return cached;
+        switch (cachePolicy.apply(e)) {
+          case USE_CACHED:
+            log.warn("New BLOB has bad signature - falling back to cached BLOB.");
+            return cached;
+          default:
+            throw e;
+        }
       } else {
         throw e;
       }
     } catch (Exception e) {
       if (cached.isPresent()) {
-        log.warn("Failed to download new BLOB - falling back to cached BLOB.", e);
-        return cached;
+        switch (cachePolicy.apply(e)) {
+          case USE_CACHED:
+            log.warn("Failed to download new BLOB - falling back to cached BLOB.", e);
+            return cached;
+          default:
+            throw e;
+        }
       } else {
         throw e;
       }
@@ -1410,5 +1459,18 @@ public final class FidoMetadataDownloader {
     boolean isOk() {
       return content.isPresent();
     }
+  }
+
+  /**
+   * Values for the {@link FidoMetadataDownloaderBuilder#cachePolicy(Function)} argument function to
+   * return to express how {@link #refreshBlob()} and {@link #loadCachedBlob()} should behave when a
+   * BLOB download fails.
+   */
+  public enum CachePolicyDecision {
+    /** Recover by returning the cached BLOB as a successful result. */
+    USE_CACHED,
+
+    /** Propagate the failure by re-throwing the exception. */
+    THROW;
   }
 }

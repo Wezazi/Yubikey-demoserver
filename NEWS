@@ -59,6 +59,8 @@ New features:
   status, but returns an `ETag` response header matching the `"no"` of the
   cached BLOB, if any, this is now interpreted like a successful `304 Not
   Modified` response.
+* Added `.cachePolicy` setting to `FidoMetadataDownloader` to allow dynamically
+  opting out of falling back to cache when a BLOB download fails.
 
 Fixes:
 
