@@ -18,6 +18,12 @@ Fixes:
 
 `webauthn-server-attestation`:
 
+Changes:
+
+* `FidoMetadataDownloader` builder method `.downloadBlob(URL)` now logs a
+  warning if the given URL is not an HTTPS URL. Javadoc relaxed to not describe
+  HTTPS as required since this was never enforced.
+
 New features:
 
 * Added `AuthenticatorStatus.RETIRED` and `Filters.notRetired()`.

@@ -424,7 +424,7 @@ public final class FidoMetadataDownloader {
       }
 
       /**
-       * Download the metadata BLOB from the given HTTPS <code>url</code>.
+       * Download the metadata BLOB from the given HTTP or HTTPS <code>url</code>.
        *
        * <p>The BLOB will be downloaded if it does not exist in the cache, or if the <code>
        * nextUpdate</code> property of the cached BLOB is the current date or earlier.
@@ -432,9 +432,16 @@ public final class FidoMetadataDownloader {
        * <p>If the BLOB is downloaded, it is also written to the cache {@link File} or {@link
        * Consumer} configured in the next step.
        *
-       * @param url the HTTP URL to download. It MUST use the <code>https:</code> scheme.
+       * <p>It is RECOMMENDED to use a HTTPS URL for improved transport security. Most notably this
+       * helps prevent attacks that could force the application to continue using a stale cached
+       * BLOB even after the real MDS has a newer BLOB available.
+       *
+       * @param url the HTTP or HTTPS URL to download.
        */
       public Step5 downloadBlob(@NonNull URL url) {
+        if (!"https".equals(url.getProtocol())) {
+          log.warn("FIDO MDS BLOB download URL is not a HTTPS URL: {}", url);
+        }
         return new Step5(this, null, url);
       }
 
