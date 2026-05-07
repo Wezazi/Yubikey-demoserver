@@ -876,7 +876,7 @@ public final class FidoMetadataDownloader {
 
     try {
       log.debug("Attempting to download new BLOB...");
-      final ByteArray downloadedBytes =
+      final DownloadResult downloadResult =
           download(
               blobUrl,
               // This should ideally use the value of the ETag response header from when the cached
@@ -884,40 +884,42 @@ public final class FidoMetadataDownloader {
               // format of the cache serialization. This is good enough as the MDS explicitly
               // specifies that the ETag is set to the "no" of the BLOB.
               cached.map(cachedBlob -> String.format("%d", cachedBlob.getPayload().getNo())));
-      final MetadataBLOB downloadedBlob = parseAndVerifyBlob(downloadedBytes, trustRoot);
-      log.debug("New BLOB downloaded.");
+      if (downloadResult.isNotModified()) {
+        log.debug("Remote BLOB not modified - using cached BLOB.");
+        return cached;
 
-      if (cached.isPresent()) {
-        log.debug("Cached BLOB exists - checking if new BLOB has a higher \"no\"...");
-        if (downloadedBlob.getPayload().getNo() <= cached.get().getPayload().getNo()) {
-          log.debug("New BLOB does not have a higher \"no\" - using cached BLOB instead.");
-          return cached;
+      } else {
+        ByteArray downloadedBytes = downloadResult.getContent();
+        final MetadataBLOB downloadedBlob = parseAndVerifyBlob(downloadedBytes, trustRoot);
+        log.debug("New BLOB downloaded.");
+
+        if (cached.isPresent()) {
+          log.debug("Cached BLOB exists - checking if new BLOB has a higher \"no\"...");
+          if (downloadedBlob.getPayload().getNo() <= cached.get().getPayload().getNo()) {
+            log.debug("New BLOB does not have a higher \"no\" - using cached BLOB instead.");
+            return cached;
+          }
+          log.debug("New BLOB has a higher \"no\" - proceeding with new BLOB.");
         }
-        log.debug("New BLOB has a higher \"no\" - proceeding with new BLOB.");
-      }
 
-      log.debug("Checking legalHeader in new BLOB...");
-      if (!expectedLegalHeaders.contains(downloadedBlob.getPayload().getLegalHeader())) {
-        throw new UnexpectedLegalHeader(cached.orElse(null), downloadedBlob);
-      }
-
-      log.debug("Writing new BLOB to cache...");
-      if (blobCacheFile != null) {
-        try (FileOutputStream f = new FileOutputStream(blobCacheFile)) {
-          f.write(downloadedBytes.getBytes());
+        log.debug("Checking legalHeader in new BLOB...");
+        if (!expectedLegalHeaders.contains(downloadedBlob.getPayload().getLegalHeader())) {
+          throw new UnexpectedLegalHeader(cached.orElse(null), downloadedBlob);
         }
+
+        log.debug("Writing new BLOB to cache...");
+        if (blobCacheFile != null) {
+          try (FileOutputStream f = new FileOutputStream(blobCacheFile)) {
+            f.write(downloadedBytes.getBytes());
+          }
+        }
+
+        if (blobCacheConsumer != null) {
+          blobCacheConsumer.accept(downloadedBytes);
+        }
+
+        return Optional.of(downloadedBlob);
       }
-
-      if (blobCacheConsumer != null) {
-        blobCacheConsumer.accept(downloadedBytes);
-      }
-
-      return Optional.of(downloadedBlob);
-
-    } catch (NotModified e) {
-      log.debug("Remote BLOB not modified - using cached BLOB.");
-      return cached;
-
     } catch (FidoMetadataDownloaderException e) {
       if (e.getReason() == Reason.BAD_SIGNATURE && cached.isPresent()) {
         log.warn("New BLOB has bad signature - falling back to cached BLOB.");
@@ -1074,17 +1076,18 @@ public final class FidoMetadataDownloader {
   }
 
   private ByteArray download(URL url) throws IOException {
-    try {
-      return download(url, Optional.empty());
-    } catch (NotModified e) {
+    final DownloadResult downloadResult = download(url, Optional.empty());
+    if (downloadResult.isOk()) {
+      return downloadResult.getContent();
+    } else {
       final String msg =
-          "NotModified thrown by download(URL, Optional.empty()). This should be impossible, please file a bug report.";
+          "download(URL, Optional.empty()) returned non-OK success response. This should be impossible, please file a bug report.";
       log.error(msg);
-      throw new RuntimeException(msg, e);
+      throw new RuntimeException(msg);
     }
   }
 
-  private ByteArray download(URL url, Optional<String> etag) throws IOException, NotModified {
+  private DownloadResult download(URL url, Optional<String> etag) throws IOException {
     URLConnection conn = url.openConnection();
 
     if (conn instanceof HttpsURLConnection) {
@@ -1114,7 +1117,7 @@ public final class FidoMetadataDownloader {
         switch (httpsConn.getResponseCode()) {
           case 304: // Not Modified
             log.debug("Received 304 Not Modified response to download request: {}", url);
-            throw new NotModified();
+            return DownloadResult.notModified();
         }
 
         log.warn(
@@ -1135,13 +1138,13 @@ public final class FidoMetadataDownloader {
                       et.equals(responseEtag) || String.format("\"%s\"", et).equals(responseEtag))
               .orElse(false)) {
             log.debug("Response ETag matches local ETag - interpreting as not modified.");
-            throw new NotModified();
+            return DownloadResult.notModified();
           }
         }
       }
     }
 
-    return readAll(conn.getInputStream());
+    return DownloadResult.ok(readAll(conn.getInputStream()));
   }
 
   private MetadataBLOB parseAndVerifyBlob(ByteArray jwt, X509Certificate trustRootCertificate)
@@ -1379,5 +1382,26 @@ public final class FidoMetadataDownloader {
     }
   }
 
-  private static class NotModified extends Throwable {}
+  @Value
+  @AllArgsConstructor(access = AccessLevel.PRIVATE)
+  private static class DownloadResult {
+    private boolean notModified;
+    private Optional<ByteArray> content;
+
+    static DownloadResult notModified() {
+      return new DownloadResult(true, Optional.empty());
+    }
+
+    static DownloadResult ok(@NonNull ByteArray content) {
+      return new DownloadResult(false, Optional.of(content));
+    }
+
+    ByteArray getContent() {
+      return content.get();
+    }
+
+    boolean isOk() {
+      return content.isPresent();
+    }
+  }
 }
