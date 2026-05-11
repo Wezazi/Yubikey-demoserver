@@ -1,3 +1,14 @@
+== Version 2.8.2 ==
+
+Security fixes:
+
+* Fixed issue where `RelyingParty.finishAssertion` and
+  `RelyingPartyV2.finishAssertion` could return a successful authentication
+  result even though the authenticated credential is owned by a different user
+  than `StartAssertionOptions.username`. For details see CVE-[TBD] or
+  YSA-2026-02: https://www.yubico.com/support/security-advisories/ysa-2026-02/
+
+
 == Version 2.8.1 ==
 
 Fixes:

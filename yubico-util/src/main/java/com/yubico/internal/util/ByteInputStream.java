@@ -36,26 +36,14 @@ public class ByteInputStream extends DataInputStream {
   }
 
   public byte[] read(int numberOfBytes) throws IOException {
+    if (numberOfBytes < 0) {
+      throw new IllegalArgumentException("numberOfBytes must not be negative");
+    }
+    if (numberOfBytes > available()) {
+      throw new IllegalArgumentException("numberOfBytes exceeds remaining input length");
+    }
     byte[] readBytes = new byte[numberOfBytes];
     readFully(readBytes);
     return readBytes;
-  }
-
-  public byte[] readAll() throws IOException {
-    byte[] readBytes = new byte[available()];
-    readFully(readBytes);
-    return readBytes;
-  }
-
-  public int readInteger() throws IOException {
-    return readInt();
-  }
-
-  public byte readSigned() throws IOException {
-    return readByte();
-  }
-
-  public int readUnsigned() throws IOException {
-    return readUnsignedByte();
   }
 }

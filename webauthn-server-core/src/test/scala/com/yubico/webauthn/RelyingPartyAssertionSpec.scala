@@ -64,6 +64,7 @@ import com.yubico.webauthn.test.Util.toStepWithUtilities
 import org.junit.runner.RunWith
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
+import org.scalacheck.Shrink
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.junit.JUnitRunner
@@ -191,9 +192,7 @@ class RelyingPartyAssertionSpec
       signature: ByteArray = Defaults.signature,
       userHandleForResponse: Option[ByteArray] = Some(Defaults.userHandle),
       userHandleForRequest: Option[ByteArray] = None,
-      userHandleForUser: ByteArray = Defaults.userHandle,
       usernameForRequest: Option[String] = Some(Defaults.username),
-      usernameForUser: String = Defaults.username,
       userVerificationRequirement: UserVerificationRequirement =
         UserVerificationRequirement.PREFERRED,
       validateSignatureCounter: Boolean = true,
@@ -250,7 +249,7 @@ class RelyingPartyAssertionSpec
                   RegisteredCredential
                     .builder()
                     .credentialId(credId)
-                    .userHandle(userHandleForUser)
+                    .userHandle(Defaults.userHandle)
                     .publicKeyCose(credentialPublicKeyBytes)
                     .signatureCount(0)
                     .build()
@@ -264,13 +263,13 @@ class RelyingPartyAssertionSpec
               : Optional[ByteArray] =
             getUserHandleIfDefaultUsername(
               username,
-              userHandle = userHandleForUser,
+              userHandle = Defaults.userHandle,
             )
           override def getUsernameForUserHandle(userHandle: ByteArray)
               : Optional[String] =
             getUsernameIfDefaultUserHandle(
               userHandle,
-              username = usernameForUser,
+              username = Defaults.username,
             )
         }
       )
@@ -631,89 +630,392 @@ class RelyingPartyAssertionSpec
         }
 
         describe("6. Identify the user being authenticated and verify that this user is the owner of the public key credential source credentialSource identified by credential.id:") {
-          object owner {
-            val username = "owner"
-            val userHandle = new ByteArray(Array(4, 5, 6, 7))
+          object userA {
+            val username = "userA"
+            val userHandle = new ByteArray(Array(0, 1, 2, 3))
+            val identity: UserIdentity = UserIdentity
+              .builder()
+              .name(username)
+              .displayName(username)
+              .id(userHandle)
+              .build()
+            val credentialId = new ByteArray(Array(4, 5, 6, 7))
           }
-          object nonOwner {
-            val username = "non-owner"
+          object userB {
+            val username = "userB"
             val userHandle = new ByteArray(Array(8, 9, 10, 11))
+            val identity: UserIdentity = UserIdentity
+              .builder()
+              .name(username)
+              .displayName(username)
+              .id(userHandle)
+              .build()
+            val credentialId = new ByteArray(Array(12, 13, 14, 15))
+          }
+          object userUnknown {
+            val username = "unknown"
+            val userHandle = new ByteArray(Array(16, 17, 18, 19))
           }
 
-          val credentialRepository = Some(new CredentialRepository {
-            override def lookup(id: ByteArray, uh: ByteArray) =
-              Some(
-                RegisteredCredential
-                  .builder()
-                  .credentialId(new ByteArray(Array(0, 1, 2, 3)))
-                  .userHandle(owner.userHandle)
-                  .publicKeyCose(getPublicKeyBytes(Defaults.credentialKey))
-                  .signatureCount(0)
-                  .build()
-              ).toJava
-            override def lookupAll(id: ByteArray) = ???
-            override def getCredentialIdsForUsername(username: String) = ???
-            override def getUserHandleForUsername(
-                username: String
-            ): Optional[ByteArray] =
-              Some(
-                if (username == owner.username) owner.userHandle
-                else nonOwner.userHandle
-              ).toJava
-            override def getUsernameForUserHandle(
-                userHandle: ByteArray
-            ): Optional[String] =
-              Some(
-                if (userHandle == owner.userHandle) owner.username
-                else nonOwner.username
-              ).toJava
-          })
+          val credentialRepository =
+            Helpers.CredentialRepository.withUsersSimple(
+              (
+                userA.identity,
+                userA.credentialId,
+                getPublicKeyBytes(Defaults.credentialKey),
+              ),
+              (
+                userB.identity,
+                userB.credentialId,
+                getPublicKeyBytes(Defaults.credentialKey),
+              ),
+            )
+          val allowCredentials = Some(
+            List(
+              PublicKeyCredentialDescriptor
+                .builder()
+                .id(userA.credentialId)
+                .build()
+            ).asJava
+          )
 
           describe("If the user was identified before the authentication ceremony was initiated, e.g., via a username or cookie, verify that the identified user is the owner of credentialSource. If response.userHandle is present, let userHandle be its value. Verify that userHandle also maps to the same user.") {
             it(
-              "Fails if credential ID is not owned by the given user handle."
+              "Fails if response.credentialId does not match request.username, when request.username is known."
             ) {
               val steps = finishAssertion(
-                credentialRepository = credentialRepository,
-                userHandleForResponse = Some(nonOwner.userHandle),
-                userHandleForUser = owner.userHandle,
-                usernameForRequest = Some(owner.username),
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = Some(userB.username),
+                userHandleForRequest = None,
+                userHandleForResponse = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
                 steps.begin.next
 
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userB.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(None)
+              step.getFinalUserHandle.toScala should be(Some(userB.userHandle))
               step.validations shouldBe a[Failure[_]]
               step.validations.failed.get shouldBe an[IllegalArgumentException]
               step.tryNext shouldBe a[Failure[_]]
             }
 
             it(
-              "Fails if response.userHandle does not identify the same user as request.username."
+              "Fails if response.credentialId does not match request.username, when request.username is unknown."
             ) {
               val steps = finishAssertion(
-                credentialRepository = credentialRepository,
-                usernameForRequest = Some(nonOwner.username),
-                userHandleForUser = owner.userHandle,
-                userHandleForResponse = Some(owner.userHandle),
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = Some(userUnknown.username),
+                userHandleForRequest = None,
+                userHandleForResponse = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
                 steps.begin.next
 
+              step.getEffectiveRequestUserHandle.toScala should be(None)
+              step.getResponseUserHandle.toScala should be(None)
+              step.getFinalUserHandle.toScala should be(None)
               step.validations shouldBe a[Failure[_]]
               step.validations.failed.get shouldBe an[IllegalArgumentException]
               step.tryNext shouldBe a[Failure[_]]
             }
 
-            it("Succeeds if credential ID is owned by the given user handle.") {
+            it(
+              "Fails if response.credentialId does not match request.userHandle, when request.userHandle is known."
+            ) {
               val steps = finishAssertion(
-                credentialRepository = credentialRepository,
-                userHandleForResponse = Some(owner.userHandle),
-                userHandleForUser = owner.userHandle,
-                usernameForRequest = Some(owner.username),
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = None,
+                userHandleForRequest = Some(userB.userHandle),
+                userHandleForResponse = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
                 steps.begin.next
 
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userB.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(None)
+              step.getFinalUserHandle.toScala should be(Some(userB.userHandle))
+              step.validations shouldBe a[Failure[_]]
+              step.validations.failed.get shouldBe an[IllegalArgumentException]
+              step.tryNext shouldBe a[Failure[_]]
+            }
+
+            it(
+              "Fails if response.credentialId does not match request.userHandle, when request.userHandle is unknown."
+            ) {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = None,
+                userHandleForRequest = Some(userUnknown.userHandle),
+                userHandleForResponse = None,
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userUnknown.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(None)
+              step.getFinalUserHandle.toScala should be(
+                Some(userUnknown.userHandle)
+              )
+              step.validations shouldBe a[Failure[_]]
+              step.validations.failed.get shouldBe an[IllegalArgumentException]
+              step.tryNext shouldBe a[Failure[_]]
+            }
+
+            it(
+              "Fails if response.credentialId matches request.username but not response.userHandle, when response.userHandle is known."
+            ) {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = Some(userA.username),
+                userHandleForRequest = None,
+                userHandleForResponse = Some(userB.userHandle),
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(
+                Some(userB.userHandle)
+              )
+              step.getFinalUserHandle.toScala should be(Some(userA.userHandle))
+              step.validations shouldBe a[Failure[_]]
+              step.validations.failed.get shouldBe an[IllegalArgumentException]
+              step.tryNext shouldBe a[Failure[_]]
+            }
+
+            it(
+              "Fails if response.credentialId matches request.username but not response.userHandle, when response.userHandle is unknown."
+            ) {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = Some(userA.username),
+                userHandleForRequest = None,
+                userHandleForResponse = Some(userUnknown.userHandle),
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(
+                Some(userUnknown.userHandle)
+              )
+              step.getFinalUserHandle.toScala should be(Some(userA.userHandle))
+              step.validations shouldBe a[Failure[_]]
+              step.validations.failed.get shouldBe an[IllegalArgumentException]
+              step.tryNext shouldBe a[Failure[_]]
+            }
+
+            it(
+              "Fails if response.credentialId matches request.userHandle but not response.userHandle, when response.userHandle is known."
+            ) {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = None,
+                userHandleForRequest = Some(userA.userHandle),
+                userHandleForResponse = Some(userB.userHandle),
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(
+                Some(userB.userHandle)
+              )
+              step.getFinalUserHandle.toScala should be(Some(userA.userHandle))
+              step.validations shouldBe a[Failure[_]]
+              step.validations.failed.get shouldBe an[IllegalArgumentException]
+              step.tryNext shouldBe a[Failure[_]]
+            }
+
+            it(
+              "Fails if response.credentialId matches request.userHandle but not response.userHandle, when response.userHandle is unknown."
+            ) {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = None,
+                userHandleForRequest = Some(userA.userHandle),
+                userHandleForResponse = Some(userUnknown.userHandle),
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(
+                Some(userUnknown.userHandle)
+              )
+              step.getFinalUserHandle.toScala should be(Some(userA.userHandle))
+              step.validations shouldBe a[Failure[_]]
+              step.validations.failed.get shouldBe an[IllegalArgumentException]
+              step.tryNext shouldBe a[Failure[_]]
+            }
+
+            it(
+              "Fails if response.credentialId matches response.userHandle but not request.username, when request.username is known."
+            ) {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = Some(userB.username),
+                userHandleForRequest = None,
+                userHandleForResponse = Some(userA.userHandle),
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userB.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getFinalUserHandle.toScala should not be None
+              step.validations shouldBe a[Failure[_]]
+              step.validations.failed.get shouldBe an[IllegalArgumentException]
+              step.tryNext shouldBe a[Failure[_]]
+            }
+
+            it(
+              "Fails if response.credentialId matches response.userHandle but not request.username, when request.username is unknown."
+            ) {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = Some(userUnknown.username),
+                userHandleForRequest = None,
+                userHandleForResponse = Some(userA.userHandle),
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(None)
+              step.getResponseUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getFinalUserHandle.toScala should be(Some(userA.userHandle))
+              step.validations shouldBe a[Failure[_]]
+              step.validations.failed.get shouldBe an[IllegalArgumentException]
+              step.tryNext shouldBe a[Failure[_]]
+            }
+
+            it("Succeeds if response.credentialId matches request.username.") {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = Some(userA.username),
+                userHandleForRequest = None,
+                userHandleForResponse = None,
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(None)
+              step.getFinalUserHandle.toScala should be(Some(userA.userHandle))
+              step.validations shouldBe a[Success[_]]
+              step.tryNext shouldBe a[Success[_]]
+            }
+
+            it("Succeeds if response.credentialId matches request.username and response.userHandle.") {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = Some(userA.username),
+                userHandleForRequest = None,
+                userHandleForResponse = Some(userA.userHandle),
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getFinalUserHandle.toScala should be(Some(userA.userHandle))
+              step.validations shouldBe a[Success[_]]
+              step.tryNext shouldBe a[Success[_]]
+            }
+
+            it(
+              "Succeeds if response.credentialId matches request.userHandle."
+            ) {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = None,
+                userHandleForRequest = Some(userA.userHandle),
+                userHandleForResponse = None,
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(None)
+              step.getFinalUserHandle.toScala should be(Some(userA.userHandle))
+              step.validations shouldBe a[Success[_]]
+              step.tryNext shouldBe a[Success[_]]
+            }
+
+            it("Succeeds if response.credentialId matches request.userHandle and response.userHandle.") {
+              val steps = finishAssertion(
+                allowCredentials = allowCredentials,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = None,
+                userHandleForRequest = Some(userA.userHandle),
+                userHandleForResponse = Some(userA.userHandle),
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getResponseUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getFinalUserHandle.toScala should be(Some(userA.userHandle))
               step.validations shouldBe a[Success[_]]
               step.tryNext shouldBe a[Success[_]]
             }
@@ -724,113 +1026,328 @@ class RelyingPartyAssertionSpec
               "Fails if response.userHandle is not present."
             ) {
               val steps = finishAssertion(
-                credentialRepository = credentialRepository,
+                allowCredentials = None,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
                 usernameForRequest = None,
-                userHandleForUser = owner.userHandle,
-                userHandleForResponse = None,
-              )
-              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
-                steps.begin.next
-
-              step.validations shouldBe a[Failure[_]]
-              step.validations.failed.get shouldBe an[IllegalArgumentException]
-              step.tryNext shouldBe a[Failure[_]]
-            }
-
-            it(
-              "Fails if credential ID is not owned by the user handle in the response."
-            ) {
-              val steps = finishAssertion(
-                credentialRepository = credentialRepository,
-                userHandleForResponse = Some(nonOwner.userHandle),
-                userHandleForUser = owner.userHandle,
-                usernameForRequest = None,
-              )
-              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
-                steps.begin.next
-
-              step.validations shouldBe a[Failure[_]]
-              step.validations.failed.get shouldBe an[IllegalArgumentException]
-              step.tryNext shouldBe a[Failure[_]]
-            }
-
-            it(
-              "Fails if credential ID is not owned by the user handle in the request."
-            ) {
-              val steps = finishAssertion(
-                credentialRepository = credentialRepository,
-                userHandleForRequest = Some(nonOwner.userHandle),
-                userHandleForResponse = None,
-                userHandleForUser = owner.userHandle,
-                usernameForRequest = None,
-              )
-              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
-                steps.begin.next
-
-              step.validations shouldBe a[Failure[_]]
-              step.validations.failed.get shouldBe an[IllegalArgumentException]
-              step.tryNext shouldBe a[Failure[_]]
-            }
-
-            it("Fails if neither username nor user handle is given.") {
-              val steps = finishAssertion(
-                credentialRepository = credentialRepository,
                 userHandleForRequest = None,
                 userHandleForResponse = None,
-                userHandleForUser = owner.userHandle,
-                usernameForRequest = None,
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
                 steps.begin.next
 
+              step.getEffectiveRequestUserHandle.toScala should be(None)
+              step.getResponseUserHandle.toScala should be(None)
+              step.getFinalUserHandle.toScala should be(None)
               step.validations shouldBe a[Failure[_]]
               step.validations.failed.get shouldBe an[IllegalArgumentException]
               step.tryNext shouldBe a[Failure[_]]
             }
 
-            it("Fails if user handle in request does not agree with user handle in response.") {
+            it(
+              "Fails if response.credentialId does not match response.userHandle, when response.userHandle is known."
+            ) {
               val steps = finishAssertion(
-                credentialRepository = credentialRepository,
-                userHandleForRequest = Some(owner.userHandle),
-                userHandleForResponse = Some(nonOwner.userHandle),
-                userHandleForUser = owner.userHandle,
+                allowCredentials = None,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
                 usernameForRequest = None,
+                userHandleForRequest = None,
+                userHandleForResponse = Some(userB.userHandle),
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
                 steps.begin.next
 
+              step.getEffectiveRequestUserHandle.toScala should be(None)
+              step.getResponseUserHandle.toScala should be(
+                Some(userB.userHandle)
+              )
+              step.getFinalUserHandle.toScala should be(Some(userB.userHandle))
               step.validations shouldBe a[Failure[_]]
               step.validations.failed.get shouldBe an[IllegalArgumentException]
               step.tryNext shouldBe a[Failure[_]]
             }
 
-            it("Succeeds if credential ID is owned by the user handle in the response.") {
+            it(
+              "Fails if response.credentialId does not match response.userHandle, when response.userHandle is unknown."
+            ) {
               val steps = finishAssertion(
-                credentialRepository = credentialRepository,
-                userHandleForResponse = Some(owner.userHandle),
-                userHandleForUser = owner.userHandle,
+                allowCredentials = None,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
                 usernameForRequest = None,
+                userHandleForRequest = None,
+                userHandleForResponse = Some(userUnknown.userHandle),
               )
               val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
                 steps.begin.next
 
+              step.getEffectiveRequestUserHandle.toScala should be(None)
+              step.getResponseUserHandle.toScala should be(
+                Some(userUnknown.userHandle)
+              )
+              step.getFinalUserHandle.toScala should be(
+                Some(userUnknown.userHandle)
+              )
+              step.validations shouldBe a[Failure[_]]
+              step.validations.failed.get shouldBe an[IllegalArgumentException]
+              step.tryNext shouldBe a[Failure[_]]
+            }
+
+            it(
+              "Succeeds if response.credentialId matches response.userHandle."
+            ) {
+              val steps = finishAssertion(
+                allowCredentials = None,
+                credentialId = userA.credentialId,
+                credentialRepository = Some(credentialRepository),
+                usernameForRequest = None,
+                userHandleForRequest = None,
+                userHandleForResponse = Some(userA.userHandle),
+              )
+              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                steps.begin.next
+
+              step.getEffectiveRequestUserHandle.toScala should be(None)
+              step.getResponseUserHandle.toScala should be(
+                Some(userA.userHandle)
+              )
+              step.getFinalUserHandle.toScala should be(Some(userA.userHandle))
               step.validations shouldBe a[Success[_]]
               step.tryNext shouldBe a[Success[_]]
             }
+          }
 
-            it("Succeeds if credential ID is owned by the user handle in the request.") {
-              val steps = finishAssertion(
-                credentialRepository = credentialRepository,
-                userHandleForRequest = Some(owner.userHandle),
-                userHandleForResponse = None,
-                userHandleForUser = owner.userHandle,
-                usernameForRequest = None,
+          describe("Invariants:") {
+            val genCredentialIdAndAllowCredentials = for {
+              credentialId <- Gen.oneOf(userA.credentialId, userB.credentialId)
+              allowCredentials <- Gen.oneOf(
+                Some(
+                  List(
+                    PublicKeyCredentialDescriptor
+                      .builder()
+                      .id(credentialId)
+                      .build()
+                  ).asJava
+                ),
+                Some(List.empty[PublicKeyCredentialDescriptor].asJava),
+                None,
               )
-              val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
-                steps.begin.next
+            } yield (credentialId, allowCredentials)
 
-              step.validations shouldBe a[Success[_]]
-              step.tryNext shouldBe a[Success[_]]
+            val genUsername = Gen.oneOf(
+              Some(userA.username),
+              Some(userB.username),
+              Some(userUnknown.username),
+              None,
+            )
+
+            val genUserHandle = Gen.oneOf(
+              Some(userA.userHandle),
+              Some(userB.userHandle),
+              Some(userUnknown.userHandle),
+              None,
+            )
+
+            val genUsernameOrUserHandle = for {
+              username <- genUsername
+              userHandle <- genUserHandle
+              genUsername <- arbitrary[Boolean]
+            } yield {
+              if (genUsername) {
+                (username, None)
+              } else {
+                (None, userHandle)
+              }
+            }
+
+            describe("On success, the AssertionResult reflects the same user as the AssertionRequest and response.userHandle") {
+              def checks(credentialRepository: CredentialRepository): Unit = {
+                implicit val noShrinkString: Shrink[String] = Shrink.shrinkAny
+                forAll(
+                  genCredentialIdAndAllowCredentials,
+                  genUsernameOrUserHandle,
+                  genUserHandle,
+                  maxDiscardedFactor(20), // This helps the `whenever` clause below not make the test flaky
+                ) {
+                  case (
+                        (credentialId, allowCredentials),
+                        (usernameForRequest, userHandleForRequest),
+                        userHandleForResponse,
+                      ) =>
+                    val steps = finishAssertion(
+                      allowCredentials = allowCredentials,
+                      credentialId = credentialId,
+                      credentialRepository = Some(credentialRepository),
+                      usernameForRequest = usernameForRequest,
+                      userHandleForRequest = userHandleForRequest,
+                      userHandleForResponse = userHandleForResponse,
+                    )
+                    val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                      steps.begin.next
+
+                    usernameForRequest.foreach { reqUsername =>
+                      step.getEffectiveRequestUsername.toScala should equal(
+                        Some(reqUsername)
+                      )
+                    }
+                    userHandleForRequest.foreach { reqUserHandle =>
+                      step.getEffectiveRequestUserHandle.toScala should equal(
+                        Some(reqUserHandle)
+                      )
+                    }
+
+                    step.getEffectiveRequestUsername.toScala.foreach {
+                      reqUsername =>
+                        step.getFinalUsername.toScala should equal(
+                          Some(reqUsername)
+                        )
+                    }
+                    step.getEffectiveRequestUserHandle.toScala.foreach {
+                      reqUserHandle =>
+                        step.getFinalUserHandle.toScala should equal(
+                          Some(reqUserHandle)
+                        )
+                    }
+
+                    val result = Try(step.run)
+
+                    whenever(result.isSuccess) {
+                      if (
+                        usernameForRequest.isDefined || userHandleForRequest.isDefined
+                      ) {
+                        step.getEffectiveRequestUsername.toScala should not be None
+                        step.getEffectiveRequestUserHandle.toScala should not be None
+
+                        step.getFinalUsername should equal(
+                          step.getEffectiveRequestUsername
+                        )
+                        step.getFinalUserHandle should equal(
+                          step.getEffectiveRequestUserHandle
+                        )
+                      }
+
+                      Some(result.get.getUsername) should equal(
+                        credentialRepository
+                          .getUsernameForUserHandle(
+                            result.get.getCredential.getUserHandle
+                          )
+                          .toScala
+                      )
+
+                      usernameForRequest.foreach { reqUsername =>
+                        result.get.getUsername should equal(reqUsername)
+                        credentialRepository
+                          .getUserHandleForUsername(reqUsername)
+                          .toScala should equal(
+                          Some(result.get.getCredential.getUserHandle)
+                        )
+                      }
+
+                      userHandleForRequest.foreach { reqUserHandle =>
+                        result.get.getCredential.getUserHandle should equal(
+                          reqUserHandle
+                        )
+                      }
+
+                      userHandleForResponse.foreach { userHandleForResponse =>
+                        result.get.getCredential.getUserHandle should equal(
+                          userHandleForResponse
+                        )
+                      }
+                    }
+                }
+              }
+
+              it("when the CredentialRepository is well-behaved.") {
+                checks(credentialRepository)
+              }
+
+              it("when CredentialRepository.lookup ignores the user handle.") {
+                checks(
+                  new CredentialRepository {
+                    override def getCredentialIdsForUsername(
+                        username: String
+                    ): java.util.Set[PublicKeyCredentialDescriptor] = ???
+                    override def getUserHandleForUsername(
+                        username: String
+                    ): Optional[ByteArray] =
+                      credentialRepository.getUserHandleForUsername(username)
+                    override def getUsernameForUserHandle(
+                        userHandle: ByteArray
+                    ): Optional[String] =
+                      credentialRepository.getUsernameForUserHandle(userHandle)
+                    override def lookupAll(
+                        credentialId: ByteArray
+                    ): java.util.Set[RegisteredCredential] = ???
+
+                    // This is an incorrect lookup implementation, but this test is worth having since this could be a fairly easy trap to fall into.
+                    // The potential impact includes confusing an authenticated user for a different user, which is quite bad.
+                    override def lookup(
+                        credentialId: ByteArray,
+                        userHandle: ByteArray,
+                    ): Optional[RegisteredCredential] =
+                      credentialRepository.lookup(
+                        credentialId,
+                        userA.userHandle,
+                      )
+                  }
+                )
+              }
+            }
+
+            it("Fails if CredentialRepository.getUsernameForUserHandle returns empty.") {
+              val credentialRepositoryReturnsUsernameEmpty =
+                new CredentialRepository {
+                  override def getCredentialIdsForUsername(
+                      username: String
+                  ): java.util.Set[PublicKeyCredentialDescriptor] = ???
+                  override def getUserHandleForUsername(
+                      username: String
+                  ): Optional[ByteArray] = None.toJava
+                  override def getUsernameForUserHandle(
+                      userHandle: ByteArray
+                  ): Optional[String] = None.toJava
+                  override def lookupAll(
+                      credentialId: ByteArray
+                  ): java.util.Set[RegisteredCredential] = ???
+                  override def lookup(
+                      credentialId: ByteArray,
+                      userHandle: ByteArray,
+                  ): Optional[RegisteredCredential] =
+                    credentialRepository.lookup(credentialId, userHandle)
+                }
+
+              implicit val noShrinkString: Shrink[String] = Shrink.shrinkAny
+              forAll(
+                genCredentialIdAndAllowCredentials,
+                genUsernameOrUserHandle,
+                genUserHandle,
+                minSuccessful(25),
+              ) {
+                case (
+                      (credentialId, allowCredentials),
+                      (usernameForRequest, userHandleForRequest),
+                      userHandleForResponse,
+                    ) =>
+                  val steps = finishAssertion(
+                    allowCredentials = allowCredentials,
+                    credentialId = credentialId,
+                    credentialRepository =
+                      Some(credentialRepositoryReturnsUsernameEmpty),
+                    usernameForRequest = usernameForRequest,
+                    userHandleForRequest = userHandleForRequest,
+                    userHandleForResponse = userHandleForResponse,
+                  )
+                  val step: FinishAssertionSteps[RegisteredCredential]#Step6 =
+                    steps.begin.next
+
+                  step.validations shouldBe a[Failure[_]]
+                  step.validations.failed.get shouldBe an[
+                    IllegalArgumentException
+                  ]
+                  step.tryNext shouldBe a[Failure[_]]
+              }
             }
           }
         }
