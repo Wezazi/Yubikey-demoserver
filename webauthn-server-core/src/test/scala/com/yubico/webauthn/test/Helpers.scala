@@ -13,6 +13,7 @@ import com.yubico.webauthn.data.ByteArray
 import com.yubico.webauthn.data.PublicKeyCredentialDescriptor
 import com.yubico.webauthn.data.UserIdentity
 
+import java.util
 import java.util.Optional
 import scala.jdk.CollectionConverters._
 import scala.jdk.OptionConverters.RichOption
@@ -60,50 +61,87 @@ object Helpers {
       ): java.util.Set[RegisteredCredential] = ???
     }
 
-    def withUser(
-        user: UserIdentity,
-        credential: RegisteredCredential,
-    ): CredentialRepository =
+    def withUsers(
+        users: (UserIdentity, RegisteredCredential)*
+    ): CredentialRepository = {
       new CredentialRepository {
         override def getCredentialIdsForUsername(
             username: String
-        ): java.util.Set[PublicKeyCredentialDescriptor] =
-          if (username == user.getName)
-            Set(
-              PublicKeyCredentialDescriptor
-                .builder()
-                .id(credential.getCredentialId)
-                .build()
-            ).asJava
-          else Set.empty.asJava
+        ): util.Set[PublicKeyCredentialDescriptor] =
+          users
+            .filter({
+              case (uid, _) => uid.getName == username
+            })
+            .map({
+              case (_, cred) =>
+                PublicKeyCredentialDescriptor
+                  .builder()
+                  .id(cred.getCredentialId)
+                  .build()
+            })
+            .toSet
+            .asJava
+
         override def getUserHandleForUsername(
             username: String
         ): Optional[ByteArray] =
-          if (username == user.getName)
-            Some(user.getId).toJava
-          else None.toJava
+          users
+            .find({ case (uid, _) => uid.getName == username })
+            .map({ case (uid, _) => uid.getId })
+            .toJava
+
         override def getUsernameForUserHandle(
             userHandle: ByteArray
         ): Optional[String] =
-          if (userHandle == user.getId)
-            Some(user.getName).toJava
-          else None.toJava
+          users
+            .find({ case (uid, _) => uid.getId == userHandle })
+            .map({ case (uid, _) => uid.getName })
+            .toJava
+
         override def lookup(
             credentialId: ByteArray,
             userHandle: ByteArray,
         ): Optional[RegisteredCredential] =
-          if (
-            credentialId == credential.getCredentialId && userHandle == user.getId
-          )
-            Some(credential).toJava
-          else None.toJava
+          users
+            .find({
+              case (uid, cred) =>
+                uid.getId == userHandle && cred.getCredentialId == credentialId
+            })
+            .map({ case (_, cred) => cred })
+            .toJava
+
         override def lookupAll(
             credentialId: ByteArray
-        ): java.util.Set[RegisteredCredential] =
-          if (credentialId == credential.getCredentialId)
-            Set(credential).asJava
-          else Set.empty.asJava
+        ): util.Set[RegisteredCredential] =
+          users
+            .filter({ case (_, cred) => cred.getCredentialId == credentialId })
+            .map({ case (_, cred) => cred })
+            .toSet
+            .asJava
       }
+    }
+
+    def withUsersSimple(
+        users: (UserIdentity, ByteArray, ByteArray)*
+    ): CredentialRepository = {
+      withUsers(users.map({
+        case (uid, credId, pkCose) =>
+          (
+            uid,
+            RegisteredCredential
+              .builder()
+              .credentialId(credId)
+              .userHandle(uid.getId)
+              .publicKeyCose(pkCose)
+              .build(),
+          )
+      }): _*)
+    }
+
+    def withUser(
+        user: UserIdentity,
+        credential: RegisteredCredential,
+    ): CredentialRepository = withUsers((user, credential))
   }
 
   object CredentialRepositoryV2 {

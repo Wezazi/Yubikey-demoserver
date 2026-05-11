@@ -25,18 +25,14 @@
 package demo.webauthn;
 
 import demo.App;
-import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
-import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.server.SslConnectionFactory;
 import org.eclipse.jetty.servlet.DefaultServlet;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
-import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.servlet.ServletContainer;
 
@@ -52,21 +48,10 @@ public class EmbeddedServer {
     config.registerClasses(app.getClasses());
     config.registerInstances(app.getSingletons());
 
-    SslContextFactory ssl = new SslContextFactory("keystore.jks");
-    ssl.setKeyStorePassword("p@ssw0rd");
-
     Server server = new Server();
     HttpConfiguration httpConfig = new HttpConfiguration();
-    httpConfig.setSecureScheme("https");
-    httpConfig.setSecurePort(port);
-    HttpConfiguration httpsConfig = new HttpConfiguration(httpConfig);
-    httpsConfig.addCustomizer(new SecureRequestCustomizer());
 
-    ServerConnector connector =
-        new ServerConnector(
-            server,
-            new SslConnectionFactory(ssl, HttpVersion.HTTP_1_1.asString()),
-            new HttpConnectionFactory(httpsConfig));
+    ServerConnector connector = new ServerConnector(server, new HttpConnectionFactory(httpConfig));
 
     connector.setPort(port);
     connector.setHost("127.0.0.1");
