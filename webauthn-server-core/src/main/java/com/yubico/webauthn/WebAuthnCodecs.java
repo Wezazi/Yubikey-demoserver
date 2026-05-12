@@ -56,7 +56,7 @@ final class WebAuthnCodecs {
           });
   private static final ByteArray P384_CURVE_OID =
       new ByteArray(new byte[] {0x2B, (byte) 0x81, 0x04, 0, 34}); // OID 1.3.132.0.34
-  private static final ByteArray P512_CURVE_OID =
+  private static final ByteArray P521_CURVE_OID =
       new ByteArray(new byte[] {0x2B, (byte) 0x81, 0x04, 0, 35}); // OID 1.3.132.0.35
 
   static final ByteArray ED25519_ALG_ID =
@@ -209,7 +209,7 @@ final class WebAuthnCodecs {
         break;
 
       case COSE_CRV_P521:
-        curveOid = P512_CURVE_OID.getBytes();
+        curveOid = P521_CURVE_OID.getBytes();
         break;
 
       default:

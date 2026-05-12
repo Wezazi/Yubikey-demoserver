@@ -87,6 +87,8 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>Use the {@link #builder() builder} to configure settings, then use the {@link
  * #findEntries(List, AAGUID)} method or its overloads to retrieve metadata entries.
+ *
+ * @since 2.0.0
  */
 @Slf4j
 public final class FidoMetadataService implements AttestationTrustSource {
@@ -234,6 +236,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
        *
        * <p>This is an alias of <code>useBlob(blob.getPayload()</code>.
        *
+       * @since 2.0.0
        * @see FidoMetadataDownloader#loadCachedBlob()
        * @see #useBlob(MetadataBLOBPayload)
        */
@@ -247,6 +250,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
        * <p>The {@link FidoMetadataDownloader#loadCachedBlob()} method returns a value whose {@link
        * MetadataBLOB#getPayload() .getPayload()} result is suitable for use here.
        *
+       * @since 2.0.0
        * @see FidoMetadataDownloader#loadCachedBlob()
        * @see #useBlob(MetadataBLOB)
        */
@@ -263,9 +267,12 @@ public final class FidoMetadataService implements AttestationTrustSource {
      *
      * <p>The default is {@link Filters#notRevoked() Filters.notRevoked()}. Setting a different
      * filter overrides this default; to preserve the "not revoked" condition in addition to the new
-     * filter, you must explicitly include the condition in the few filter. For example, by using
-     * {@link Filters#allOf(Predicate[]) Filters.allOf(Predicate...)}.
+     * filter, you must explicitly include the condition in the new filter, for example by using
+     * {@link Filters#allOf(Predicate[]) Filters.allOf(Predicate...)}. To add the {@link
+     * Filters#notRetired() Filters.notRetired()} filter, use: <code>
+     * .prefilter(Filters.allOf(Filters.notRevoked(), Filters.notRetired()))</code>.
      *
+     * @since 2.0.0
      * @param prefilter a {@link Predicate} which returns <code>true</code> for metadata entries to
      *     include in the data source.
      * @see #filter(Predicate)
@@ -300,6 +307,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
      * @param filter a {@link Predicate} which returns <code>true</code> for metadata entries to
      *     allow for the corresponding authenticator during credential registration and metadata
      *     lookup.
+     * @since 2.0.0
      * @see #prefilter(Predicate)
      * @see AuthenticatorToBeFiltered
      * @see Filters#allOf(Predicate[])
@@ -318,6 +326,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
      *
      * @param certStore a {@link CertStore} of additional CRLs and/or intermediate certificates to
      *     use while validating attestation certificate paths.
+     * @since 2.0.0
      */
     public FidoMetadataServiceBuilder certStore(@NonNull CertStore certStore) {
       this.certStore = certStore;
@@ -345,6 +354,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
    * FidoMetadataServiceBuilder#prefilter(Predicate) prefilter} and {@link
    * FidoMetadataServiceBuilder#filter(Predicate) filter} settings.
    *
+   * @since 2.0.0
    * @see FidoMetadataServiceBuilder#prefilter(Predicate)
    * @see FidoMetadataServiceBuilder#filter(Predicate)
    */
@@ -358,6 +368,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
      * @param filters A set of filters.
      * @return A filter which only accepts inputs that satisfy ALL of the given <code>
      *     filters</code>.
+     * @since 2.0.0
      */
     @SafeVarargs
     public static <T> Predicate<T> allOf(Predicate<T>... filters) {
@@ -369,6 +380,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
      * statusReports} array contains no entry with {@link AuthenticatorStatus#REVOKED REVOKED}
      * status.
      *
+     * @since 2.0.0
      * @see AuthenticatorStatus#REVOKED
      */
     public static Predicate<MetadataBLOBPayloadEntry> notRevoked() {
@@ -376,6 +388,21 @@ public final class FidoMetadataService implements AttestationTrustSource {
           entry.getStatusReports().stream()
               .noneMatch(
                   statusReport -> AuthenticatorStatus.REVOKED.equals(statusReport.getStatus()));
+    }
+
+    /**
+     * Include any metadata entry whose {@link MetadataBLOBPayloadEntry#getStatusReports()
+     * statusReports} array contains no entry with {@link AuthenticatorStatus#RETIRED RETIRED}
+     * status.
+     *
+     * @since 2.9.0
+     * @see AuthenticatorStatus#RETIRED
+     */
+    public static Predicate<MetadataBLOBPayloadEntry> notRetired() {
+      return (entry) ->
+          entry.getStatusReports().stream()
+              .noneMatch(
+                  statusReport -> AuthenticatorStatus.RETIRED.equals(statusReport.getStatus()));
     }
 
     /**
@@ -390,6 +417,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
      * {@link AuthenticatorToBeFiltered#getAttestationCertificateChain() attestation certificate
      * chain}.
      *
+     * @since 2.0.0
      * @see AuthenticatorStatus#ATTESTATION_KEY_COMPROMISE
      */
     public static Predicate<AuthenticatorToBeFiltered> noAttestationKeyCompromise() {
@@ -417,6 +445,8 @@ public final class FidoMetadataService implements AttestationTrustSource {
     /**
      * This class encapsulates parameters for filtering authenticators in the {@link
      * FidoMetadataServiceBuilder#filter(Predicate) filter} setting of {@link FidoMetadataService}.
+     *
+     * @since 2.0.0
      */
     @Value
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -426,12 +456,16 @@ public final class FidoMetadataService implements AttestationTrustSource {
        * The attestation certificate chain from the <a
        * href="https://www.w3.org/TR/2021/REC-webauthn-2-20210408/#attestation-statement">attestation
        * statement</a> from an authenticator about ot be registered.
+       *
+       * @since 2.0.0
        */
       @NonNull List<X509Certificate> attestationCertificateChain;
 
       /**
        * A metadata BLOB entry that matches the {@link #getAttestationCertificateChain()} and {@link
        * #getAaguid()} in this same {@link AuthenticatorToBeFiltered} object.
+       *
+       * @since 2.0.0
        */
       @NonNull MetadataBLOBPayloadEntry metadataEntry;
 
@@ -444,6 +478,8 @@ public final class FidoMetadataService implements AttestationTrustSource {
        *
        * <p>This will not be present if the attested credential data contained an AAGUID of all
        * zeroes.
+       *
+       * @since 2.0.0
        */
       public Optional<AAGUID> getAaguid() {
         return Optional.ofNullable(aaguid);
@@ -491,6 +527,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
    *                             attestationCertificateChain</code>, if any.
    *     </ul>
    *
+   * @since 2.0.0
    * @see #findEntries(List)
    * @see #findEntries(List, AAGUID)
    */
@@ -566,6 +603,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
   /**
    * Alias of <code>findEntries(attestationCertificateChain, Optional.empty())</code>.
    *
+   * @since 2.0.0
    * @see #findEntries(List, Optional)
    */
   public Set<MetadataBLOBPayloadEntry> findEntries(
@@ -576,6 +614,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
   /**
    * Alias of <code>findEntries(attestationCertificateChain, Optional.of(aaguid))</code>.
    *
+   * @since 2.0.0
    * @see #findEntries(List, Optional)
    */
   public Set<MetadataBLOBPayloadEntry> findEntries(
@@ -594,6 +633,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
    *   .orElseGet(Collections::emptySet)
    * </pre>
    *
+   * @since 2.0.0
    * @see #findEntries(List, Optional)
    */
   public Set<MetadataBLOBPayloadEntry> findEntries(@NonNull RegistrationResult registrationResult) {
@@ -606,6 +646,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
   /**
    * Find metadata entries matching the given AAGUID.
    *
+   * @since 2.0.0
    * @see #findEntries(List, Optional)
    */
   public Set<MetadataBLOBPayloadEntry> findEntries(@NonNull AAGUID aaguid) {
@@ -623,6 +664,7 @@ public final class FidoMetadataService implements AttestationTrustSource {
    * @return All metadata entries which satisfy the {@link
    *     FidoMetadataServiceBuilder#prefilter(Predicate) prefilter} AND for which the <code>filter
    *     </code> returns <code>true</code>.
+   * @since 2.0.0
    * @see #findEntries(List, Optional)
    */
   public Set<MetadataBLOBPayloadEntry> findEntries(
@@ -637,6 +679,9 @@ public final class FidoMetadataService implements AttestationTrustSource {
         .collect(Collectors.toSet());
   }
 
+  /**
+   * @since 2.0.0
+   */
   @Override
   public TrustRootsResult findTrustRoots(
       List<X509Certificate> attestationCertificateChain, Optional<ByteArray> aaguid) {

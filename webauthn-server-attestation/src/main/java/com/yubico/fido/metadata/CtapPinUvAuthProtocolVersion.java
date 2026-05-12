@@ -1,5 +1,6 @@
 package com.yubico.fido.metadata;
 
+import com.fasterxml.jackson.annotation.JsonEnumDefaultValue;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
@@ -10,6 +11,14 @@ import com.fasterxml.jackson.annotation.JsonValue;
  *     to Authenticator Protocol (CTAP) §6.5. authenticatorClientPIN (0x06)</a>
  */
 public enum CtapPinUvAuthProtocolVersion {
+
+  /**
+   * (NOT DEFINED IN SPEC) Placeholder for any unknown {@link CtapPinUvAuthProtocolVersion} value.
+   *
+   * @since 2.9.0
+   */
+  @JsonEnumDefaultValue
+  UNKNOWN(0),
 
   /**
    * Represents PIN/UV Auth Protocol One.

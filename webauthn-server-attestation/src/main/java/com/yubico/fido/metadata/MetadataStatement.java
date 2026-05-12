@@ -7,6 +7,7 @@ import com.yubico.webauthn.extension.uvm.KeyProtectionType;
 import com.yubico.webauthn.extension.uvm.MatcherProtectionType;
 import java.security.cert.X509Certificate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import lombok.Builder;
@@ -59,6 +60,14 @@ public class MetadataStatement {
    *     Metadata Statement</a>
    */
   Set<String> attestationCertificateKeyIdentifiers;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-friendlynames">FIDO
+   *     Metadata Statement</a>
+   */
+  Map<String, String> friendlyNames;
 
   /**
    * @see <a
@@ -211,11 +220,51 @@ public class MetadataStatement {
   String icon;
 
   /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-icondark">FIDO
+   *     Metadata Statement</a>
+   */
+  String iconDark;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-providerlogolight">FIDO
+   *     Metadata Statement</a>
+   */
+  String providerLogoLight;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-providerlogodark">FIDO
+   *     Metadata Statement</a>
+   */
+  String providerLogoDark;
+
+  /**
    * @see <a
    *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#metadata-statement-format">FIDO
    *     Metadata Statement</a>
    */
   Set<ExtensionDescriptor> supportedExtensions;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-keyscope">FIDO
+   *     Metadata Statement</a>
+   */
+  String keyScope;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-multidevicecredentialsupport">FIDO
+   *     Metadata Statement</a>
+   */
+  String multiDeviceCredentialSupport;
 
   /**
    * @see <a
@@ -224,11 +273,20 @@ public class MetadataStatement {
    */
   AuthenticatorGetInfo authenticatorGetInfo;
 
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-cxpconfigurl">FIDO
+   *     Metadata Statement</a>
+   */
+  String cxpConfigURL;
+
   public MetadataStatement(
       String legalHeader,
       AAID aaid,
       AAGUID aaguid,
       Set<String> attestationCertificateKeyIdentifiers,
+      Map<String, String> friendlyNames,
       String description,
       AlternativeDescriptions alternativeDescriptions,
       long authenticatorVersion,
@@ -250,13 +308,20 @@ public class MetadataStatement {
       List<DisplayPNGCharacteristicsDescriptor> tcDisplayPNGCharacteristics,
       @NonNull Set<X509Certificate> attestationRootCertificates,
       String icon,
+      String iconDark,
+      String providerLogoLight,
+      String providerLogoDark,
       Set<ExtensionDescriptor> supportedExtensions,
-      AuthenticatorGetInfo authenticatorGetInfo) {
+      String keyScope,
+      String multiDeviceCredentialSupport,
+      AuthenticatorGetInfo authenticatorGetInfo,
+      String cxpConfigURL) {
     this.legalHeader = legalHeader;
     this.aaid = aaid;
     this.aaguid = aaguid;
     this.attestationCertificateKeyIdentifiers =
         CollectionUtil.immutableSetOrEmpty(attestationCertificateKeyIdentifiers);
+    this.friendlyNames = CollectionUtil.immutableMapOrEmpty(friendlyNames);
     this.description = description;
     this.alternativeDescriptions = alternativeDescriptions;
     this.authenticatorVersion = authenticatorVersion;
@@ -278,8 +343,14 @@ public class MetadataStatement {
     this.tcDisplayPNGCharacteristics = tcDisplayPNGCharacteristics;
     this.attestationRootCertificates = attestationRootCertificates;
     this.icon = icon;
+    this.iconDark = iconDark;
+    this.providerLogoLight = providerLogoLight;
+    this.providerLogoDark = providerLogoDark;
     this.supportedExtensions = supportedExtensions;
+    this.keyScope = keyScope;
+    this.multiDeviceCredentialSupport = multiDeviceCredentialSupport;
     this.authenticatorGetInfo = authenticatorGetInfo;
+    this.cxpConfigURL = cxpConfigURL;
   }
 
   /**
@@ -391,6 +462,36 @@ public class MetadataStatement {
   }
 
   /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-icondark">FIDO
+   *     Metadata Statement</a>
+   */
+  public Optional<String> getIconDark() {
+    return Optional.ofNullable(this.iconDark);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-providerlogolight">FIDO
+   *     Metadata Statement</a>
+   */
+  public Optional<String> getProviderLogoLight() {
+    return Optional.ofNullable(this.providerLogoLight);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-providerlogodark">FIDO
+   *     Metadata Statement</a>
+   */
+  public Optional<String> getProviderLogoDark() {
+    return Optional.ofNullable(this.providerLogoDark);
+  }
+
+  /**
    * @see <a
    *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#metadata-statement-format">FIDO
    *     Metadata Statement</a>
@@ -400,11 +501,41 @@ public class MetadataStatement {
   }
 
   /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-keyscope">FIDO
+   *     Metadata Statement</a>
+   */
+  public Optional<String> getKeyScope() {
+    return Optional.ofNullable(this.keyScope);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-multidevicecredentialsupport">FIDO
+   *     Metadata Statement</a>
+   */
+  public Optional<String> getMultiDeviceCredentialSupport() {
+    return Optional.ofNullable(this.multiDeviceCredentialSupport);
+  }
+
+  /**
    * @see <a
    *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#metadata-statement-format">FIDO
    *     Metadata Statement</a>
    */
   public Optional<AuthenticatorGetInfo> getAuthenticatorGetInfo() {
     return Optional.ofNullable(this.authenticatorGetInfo);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#dom-metadatastatement-cxpconfigurl">FIDO
+   *     Metadata Statement</a>
+   */
+  public Optional<String> getCxpConfigURL() {
+    return Optional.ofNullable(this.cxpConfigURL);
   }
 }

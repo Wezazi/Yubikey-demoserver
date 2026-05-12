@@ -1,5 +1,6 @@
 package com.yubico.fido.metadata;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Optional;
 import lombok.Builder;
 import lombok.Value;
@@ -24,6 +25,7 @@ public class BiometricAccuracyDescriptor {
 
   Double selfAttestedFRR;
   Double selfAttestedFAR;
+  Double iAPARThreshold;
   Integer maxTemplates;
   Integer maxRetries;
   Integer blockSlowdown;
@@ -44,6 +46,17 @@ public class BiometricAccuracyDescriptor {
    */
   public Optional<Double> getSelfAttestedFAR() {
     return Optional.ofNullable(selfAttestedFAR);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.1-ps-20250521.html#sctn-type-bad">FIDO
+   *     Metadata Statement §3.3. BiometricAccuracyDescriptor dictionary</a>
+   */
+  @JsonProperty("iAPARThreshold")
+  public Optional<Double> getIAPARThreshold() {
+    return Optional.ofNullable(iAPARThreshold);
   }
 
   /**

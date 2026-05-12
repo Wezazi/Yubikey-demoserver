@@ -45,9 +45,11 @@ import lombok.extern.jackson.Jacksonized;
 @Builder(toBuilder = true)
 @Jacksonized
 @JsonIgnoreProperties({
-  "maxAuthenticatorConfigLength",
-  "defaultCredProtect"
-}) // Present in example but not defined
+  "maxAuthenticatorConfigLength", // Present in example but not defined
+  "defaultCredProtect", // Present in example but not defined
+  "encIdentifier", // Nonsensical in MDS context
+  "encCredStoreState" // Nonsensical in MDS context
+})
 public class AuthenticatorGetInfo {
 
   /**
@@ -177,6 +179,139 @@ public class AuthenticatorGetInfo {
   Map<CtapCertificationId, Integer> certifications;
   Integer remainingDiscoverableCredentials;
   Set<Integer> vendorPrototypeConfigCommands;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  List<String> attestationFormats;
+
+  /**
+   * <code>true</code> if the <code>longTouchForReset</code> member is set to <code>true</code> or
+   * <code>false</code> in the metadata statement. <code>false</code> if the <code>longTouchForReset
+   * </code> member is absent in the metadata statement.
+   *
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  boolean longTouchForReset;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  Integer uvCountSinceLastPinEntry;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  Set<String> transportsForReset;
+
+  /**
+   * <code>true</code> if the <code>pinComplexityPolicy</code> member is set to <code>true</code> or
+   * <code>false</code> in the metadata statement. <code>false</code> if the <code>
+   * pinComplexityPolicy</code> member is absent in the metadata statement.
+   *
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  boolean pinComplexityPolicy;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  String pinComplexityPolicyURL;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  Integer maxPINLength;
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  Set<Integer> authenticatorConfigCommands;
+
+  AuthenticatorGetInfo(
+      @NonNull Set<CtapVersion> versions,
+      Set<String> extensions,
+      AAGUID aaguid,
+      SupportedCtapOptions options,
+      Integer maxMsgSize,
+      Set<CtapPinUvAuthProtocolVersion> pinUvAuthProtocols,
+      Integer maxCredentialCountInList,
+      Integer maxCredentialIdLength,
+      Set<AuthenticatorTransport> transports,
+      List<PublicKeyCredentialParameters> algorithms,
+      Integer maxSerializedLargeBlobArray,
+      Boolean forcePINChange,
+      Integer minPINLength,
+      Integer firmwareVersion,
+      Integer maxCredBlobLength,
+      Integer maxRPIDsForSetMinPINLength,
+      Integer preferredPlatformUvAttempts,
+      Set<UserVerificationMethod> uvModality,
+      Map<CtapCertificationId, Integer> certifications,
+      Integer remainingDiscoverableCredentials,
+      Set<Integer> vendorPrototypeConfigCommands,
+      List<String> attestationFormats,
+      Boolean longTouchForReset,
+      Integer uvCountSinceLastPinEntry,
+      Set<String> transportsForReset,
+      Boolean pinComplexityPolicy,
+      String pinComplexityPolicyURL,
+      Integer maxPINLength,
+      Set<Integer> authenticatorConfigCommands) {
+    this.versions = versions;
+    this.extensions = extensions;
+    this.aaguid = aaguid;
+    this.options = options;
+    this.maxMsgSize = maxMsgSize;
+    this.pinUvAuthProtocols = pinUvAuthProtocols;
+    this.maxCredentialCountInList = maxCredentialCountInList;
+    this.maxCredentialIdLength = maxCredentialIdLength;
+    this.transports = transports;
+    this.algorithms = algorithms;
+    this.maxSerializedLargeBlobArray = maxSerializedLargeBlobArray;
+    this.forcePINChange = forcePINChange;
+    this.minPINLength = minPINLength;
+    this.firmwareVersion = firmwareVersion;
+    this.maxCredBlobLength = maxCredBlobLength;
+    this.maxRPIDsForSetMinPINLength = maxRPIDsForSetMinPINLength;
+    this.preferredPlatformUvAttempts = preferredPlatformUvAttempts;
+    this.uvModality = uvModality;
+    this.certifications = certifications;
+    this.remainingDiscoverableCredentials = remainingDiscoverableCredentials;
+    this.vendorPrototypeConfigCommands = vendorPrototypeConfigCommands;
+    this.attestationFormats = attestationFormats;
+    this.longTouchForReset = longTouchForReset != null;
+    this.uvCountSinceLastPinEntry = uvCountSinceLastPinEntry;
+    this.transportsForReset = transportsForReset;
+    this.pinComplexityPolicy = pinComplexityPolicy != null;
+    this.pinComplexityPolicyURL = pinComplexityPolicyURL;
+    this.maxPINLength = maxPINLength;
+    this.authenticatorConfigCommands = authenticatorConfigCommands;
+  }
 
   /**
    * @see <a
@@ -356,6 +491,66 @@ public class AuthenticatorGetInfo {
    */
   public Optional<Set<Integer>> getVendorPrototypeConfigCommands() {
     return Optional.ofNullable(vendorPrototypeConfigCommands);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  public Optional<List<String>> getAttestationFormats() {
+    return Optional.ofNullable(attestationFormats);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  public Optional<Integer> getUvCountSinceLastPinEntry() {
+    return Optional.ofNullable(uvCountSinceLastPinEntry);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  public Optional<Set<String>> getTransportsForReset() {
+    return Optional.ofNullable(transportsForReset);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  public Optional<String> getPinComplexityPolicyURL() {
+    return Optional.ofNullable(pinComplexityPolicyURL);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  public Optional<Integer> getMaxPINLength() {
+    return Optional.ofNullable(maxPINLength);
+  }
+
+  /**
+   * @since 2.9.0
+   * @see <a
+   *     href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">Client
+   *     to Authenticator Protocol (CTAP) §6.4. authenticatorGetInfo (0x04)</a>
+   */
+  public Optional<Set<Integer>> getAuthenticatorConfigCommands() {
+    return Optional.ofNullable(authenticatorConfigCommands);
   }
 
   private static class SetFromIntJsonDeserializer

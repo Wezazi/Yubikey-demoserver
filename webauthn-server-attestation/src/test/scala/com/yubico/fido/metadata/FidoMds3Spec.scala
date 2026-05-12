@@ -562,6 +562,54 @@ class FidoMds3Spec extends AnyFunSpec with Matchers {
     }
   }
 
+  it("RETIRED AuthenticatorStatus is parsed correctly.") {
+    val (blobJwt, cert, crls) = makeBlob("""{
+        "legalHeader" : "Kom ihåg att du aldrig får snyta dig i mattan!",
+        "nextUpdate" : "2022-12-01",
+        "no" : 0,
+        "entries": [
+          {
+            "aaguid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "statusReports": [
+              {
+                "status": "RETIRED",
+                "effectiveDate": "2022-02-15"
+              }
+            ],
+            "timeOfLastStatusChange": "2022-02-15"
+          }
+        ]
+      }""")
+    val downloader: FidoMetadataDownloader = FidoMetadataDownloader
+      .builder()
+      .expectLegalHeader("Kom ihåg att du aldrig får snyta dig i mattan!")
+      .useTrustRoot(cert)
+      .useBlob(blobJwt)
+      .clock(
+        Clock.fixed(Instant.parse("2022-02-15T18:00:00Z"), ZoneOffset.UTC)
+      )
+      .useCrls(crls)
+      .build()
+    val mds =
+      FidoMetadataService.builder().useBlob(downloader.loadCachedBlob()).build()
+    mds should not be null
+
+    val entries = mds
+      .findEntries(
+        Collections.emptyList(),
+        Some(
+          new AAGUID(ByteArray.fromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+        ).toJava,
+      )
+      .asScala
+    entries should not be empty
+    entries should have size 1
+    entries.head.getStatusReports should have size 1
+    entries.head.getStatusReports.get(0).getStatus should be(
+      AuthenticatorStatus.RETIRED
+    )
+  }
+
   it("More [AuthenticatorTransport] values might be added in the future. FIDO Servers MUST silently ignore all unknown AuthenticatorStatus values.") {
     val (blobJwt, cert, crls) = makeBlob("""{
         "legalHeader" : "Kom ihåg att du aldrig får snyta dig i mattan!",
@@ -984,6 +1032,97 @@ class FidoMds3Spec extends AnyFunSpec with Matchers {
           Some(aaguidC.asBytes).toJava,
         )
         .getTrustRoots
+        .asScala should not be empty
+    }
+
+  }
+
+  describe("The notRetired filter") {
+    val aaguidRetired =
+      new AAGUID(ByteArray.fromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+
+    val aaguidNotRetired =
+      new AAGUID(ByteArray.fromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+    val blob: MetadataBLOBPayload =
+      JacksonCodecs.jsonWithDefaultEnums.readValue(
+        s"""{
+        "legalHeader" : "Kom ihåg att du aldrig får snyta dig i mattan!",
+        "nextUpdate" : "2022-12-01",
+        "no" : 0,
+        "entries": [
+          {
+            "aaguid": "${aaguidRetired.asGuidString()}",
+            "attestationCertificateKeyIdentifiers": [],
+            "metadataStatement": {
+              "aaguid": "${aaguidRetired.asGuidString()}",
+              "authenticatorVersion": 1,
+              "attestationRootCertificates": [],
+              "attestationTypes" : ["basic_full"],
+              "authenticationAlgorithms" : ["secp256r1_ecdsa_sha256_raw"],
+              "keyProtection" : ["software"],
+              "matcherProtection" : ["software"],
+              "protocolFamily" : "u2f",
+              "publicKeyAlgAndEncodings" : ["ecc_x962_raw"],
+              "schema" : 3,
+              "tcDisplay" : [],
+              "upv" : [{ "major" : 1, "minor" : 1 }],
+              "userVerificationDetails" : [[{ "userVerificationMethod" : "presence_internal" }]]
+            },
+           "statusReports": [
+              { "status": "RETIRED", "effectiveDate": "2022-02-01" }
+            ],
+            "timeOfLastStatusChange": "2022-02-15"
+          },
+          {
+            "aaguid": "${aaguidNotRetired.asGuidString()}",
+            "attestationCertificateKeyIdentifiers": [],
+            "metadataStatement": {
+              "aaguid": "${aaguidNotRetired.asGuidString()}",
+              "authenticatorVersion": 1,
+              "attestationRootCertificates": [],
+              "attestationTypes" : ["basic_full"],
+              "authenticationAlgorithms" : ["secp256r1_ecdsa_sha256_raw"],
+              "keyProtection" : ["software"],
+              "matcherProtection" : ["software"],
+              "protocolFamily" : "u2f",
+              "publicKeyAlgAndEncodings" : ["ecc_x962_raw"],
+              "schema" : 3,
+              "tcDisplay" : [],
+              "upv" : [{ "major" : 1, "minor" : 1 }],
+              "userVerificationDetails" : [[{ "userVerificationMethod" : "presence_internal" }]]
+            },
+           "statusReports": [],
+            "timeOfLastStatusChange": "2022-02-15"
+          }
+        ]
+      }""".stripMargin,
+        classOf[MetadataBLOBPayload],
+      )
+
+    it("is not enabled by default.") {
+      val mds = FidoMetadataService.builder().useBlob(blob).build()
+
+      mds
+        .findEntries(aaguidRetired)
+        .asScala should not be empty
+      mds
+        .findEntries(aaguidNotRetired)
+        .asScala should not be empty
+    }
+
+    it("can be enabled explicitly as a prefilter.") {
+      val mds = FidoMetadataService
+        .builder()
+        .useBlob(blob)
+        .prefilter(FidoMetadataService.Filters.notRetired())
+        .build()
+
+      mds
+        .findEntries(aaguidRetired)
+        .asScala shouldBe empty
+      mds
+        .findEntries(aaguidNotRetired)
         .asScala should not be empty
     }
 

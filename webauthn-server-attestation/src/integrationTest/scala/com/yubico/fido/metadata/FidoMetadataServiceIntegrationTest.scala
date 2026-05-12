@@ -5,6 +5,7 @@ import com.yubico.fido.metadata.AttachmentHint.ATTACHMENT_HINT_INTERNAL
 import com.yubico.fido.metadata.AttachmentHint.ATTACHMENT_HINT_NFC
 import com.yubico.fido.metadata.AttachmentHint.ATTACHMENT_HINT_WIRED
 import com.yubico.fido.metadata.AttachmentHint.ATTACHMENT_HINT_WIRELESS
+import com.yubico.fido.metadata.TestCaches.cachedDefaultSettingsDownloader
 import com.yubico.internal.util.CertificateParser
 import com.yubico.webauthn.FinishRegistrationOptions
 import com.yubico.webauthn.RelyingParty
@@ -22,7 +23,6 @@ import org.scalatestplus.junit.JUnitRunner
 
 import java.time.Clock
 import java.time.ZoneOffset
-import java.util.Optional
 import scala.jdk.CollectionConverters.SetHasAsJava
 import scala.jdk.CollectionConverters.SetHasAsScala
 import scala.jdk.OptionConverters.RichOptional
@@ -40,21 +40,19 @@ class FidoMetadataServiceIntegrationTest
   describe("FidoMetadataService") {
 
     describe("downloaded with default settings") {
-      val downloader = FidoMetadataDownloader
-        .builder()
-        .expectLegalHeader(
-          "Retrieval and use of this BLOB indicates acceptance of the appropriate agreement located at https://fidoalliance.org/metadata/metadata-legal-terms/"
-        )
-        .useDefaultTrustRoot()
-        .useTrustRootCache(() => Optional.empty(), _ => {})
-        .useDefaultBlob()
-        .useBlobCache(() => Optional.empty(), _ => {})
-        .build()
+      val downloader = cachedDefaultSettingsDownloader.build()
       val fidoMds =
         Try(
           FidoMetadataService
             .builder()
-            .useBlob(downloader.loadCachedBlob())
+            .useBlob(
+              TestCaches.cacheSynchronized(
+                // Since the integration tests cache downloads to file:
+                // Use refreshBlob() here to always exercise the HTTP part of the downloader,
+                // and loadCachedBlob() elsewhere to not cause unnecessary server load.
+                downloader.refreshBlob()
+              )
+            )
             .build()
         )
 

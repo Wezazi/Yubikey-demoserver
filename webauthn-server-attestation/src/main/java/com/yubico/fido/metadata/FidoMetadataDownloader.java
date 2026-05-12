@@ -78,6 +78,7 @@ import java.util.Scanner;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -122,6 +123,13 @@ public final class FidoMetadataDownloader {
   @NonNull private final Clock clock;
   private final KeyStore httpsTrustStore;
   private final boolean verifyDownloadsOnly;
+  private final Function<Exception, CachePolicyDecision> cachePolicy;
+
+  /** For overriding JSON mapper settings in tests. */
+  private final Supplier<ObjectMapper> makeHeaderJsonMapper;
+
+  /** For overriding JSON mapper settings in tests. */
+  private final Supplier<ObjectMapper> makePayloadJsonMapper;
 
   /**
    * Begin configuring a {@link FidoMetadataDownloader} instance. See the {@link
@@ -152,6 +160,13 @@ public final class FidoMetadataDownloader {
     @NonNull private Clock clock = Clock.systemUTC();
     private KeyStore httpsTrustStore = null;
     private boolean verifyDownloadsOnly = false;
+    private Function<Exception, CachePolicyDecision> cachePolicy =
+        (e) -> CachePolicyDecision.USE_CACHED;
+
+    private Supplier<ObjectMapper> makeHeaderJsonMapper =
+        FidoMetadataDownloader::defaultHeaderJsonMapper;
+    private Supplier<ObjectMapper> makePayloadJsonMapper =
+        FidoMetadataDownloader::defaultPayloadJsonMapper;
 
     public FidoMetadataDownloader build() {
       return new FidoMetadataDownloader(
@@ -170,7 +185,10 @@ public final class FidoMetadataDownloader {
           certStore,
           clock,
           httpsTrustStore,
-          verifyDownloadsOnly);
+          verifyDownloadsOnly,
+          cachePolicy,
+          makeHeaderJsonMapper,
+          makePayloadJsonMapper);
     }
 
     /**
@@ -411,7 +429,7 @@ public final class FidoMetadataDownloader {
       }
 
       /**
-       * Download the metadata BLOB from the given HTTPS <code>url</code>.
+       * Download the metadata BLOB from the given HTTP or HTTPS <code>url</code>.
        *
        * <p>The BLOB will be downloaded if it does not exist in the cache, or if the <code>
        * nextUpdate</code> property of the cached BLOB is the current date or earlier.
@@ -419,9 +437,16 @@ public final class FidoMetadataDownloader {
        * <p>If the BLOB is downloaded, it is also written to the cache {@link File} or {@link
        * Consumer} configured in the next step.
        *
-       * @param url the HTTP URL to download. It MUST use the <code>https:</code> scheme.
+       * <p>It is RECOMMENDED to use a HTTPS URL for improved transport security. Most notably this
+       * helps prevent attacks that could force the application to continue using a stale cached
+       * BLOB even after the real MDS has a newer BLOB available.
+       *
+       * @param url the HTTP or HTTPS URL to download.
        */
       public Step5 downloadBlob(@NonNull URL url) {
+        if (!"https".equals(url.getProtocol())) {
+          log.warn("FIDO MDS BLOB download URL is not a HTTPS URL: {}", url);
+        }
         return new Step5(this, null, url);
       }
 
@@ -634,6 +659,54 @@ public final class FidoMetadataDownloader {
      */
     public FidoMetadataDownloaderBuilder verifyDownloadsOnly(final boolean verifyDownloadsOnly) {
       this.verifyDownloadsOnly = verifyDownloadsOnly;
+      return this;
+    }
+
+    /**
+     * Define a policy for how {@link #refreshBlob()} and {@link #loadCachedBlob()} should behave
+     * when a BLOB download fails.
+     *
+     * <p><code>cachePolicy</code> will be invoked when a cached BLOB is available and any attempt
+     * to download, parse and verify a new BLOB fails. Its argument will be the {@link Exception}
+     * that caused the failure. If <code>cachePolicy</code> returns {@link
+     * CachePolicyDecision#USE_CACHED}, then the {@link #refreshBlob()} or {@link #loadCachedBlob()}
+     * invocation will log a warning and return the cached BLOB as a successful result. If <code>
+     * cachePolicy</code> returns {@link CachePolicyDecision#THROW}, then the exception will be
+     * re-thrown and the {@link #refreshBlob()} or {@link #loadCachedBlob()} invocation will fail.
+     *
+     * <p><code>cachePolicy</code> MUST NOT return <code>null</code>.
+     *
+     * <p>When no cached BLOB is available, the exception is automatically re-thrown and <code>
+     * cachePolicy</code> is not invoked.
+     *
+     * <p>See the documentation of {@link #refreshBlob()} and {@link #loadCachedBlob()} for what
+     * kinds of exceptions may be thrown.
+     *
+     * <p>The default policy always returns {@link CachePolicyDecision#USE_CACHED}.
+     *
+     * @param cachePolicy the policy used to decide whether to throw or fall back to cache when a
+     *     BLOB download fails. MUST NOT return <code>null</code>.
+     * @see CachePolicyDecision
+     * @see #refreshBlob()
+     * @see #loadCachedBlob() ()
+     */
+    public FidoMetadataDownloaderBuilder cachePolicy(
+        final Function<Exception, CachePolicyDecision> cachePolicy) {
+      this.cachePolicy = cachePolicy;
+      return this;
+    }
+
+    /** For internal testing use only. */
+    FidoMetadataDownloaderBuilder headerJsonMapper(
+        final Supplier<ObjectMapper> makeHeaderJsonMapper) {
+      this.makeHeaderJsonMapper = makeHeaderJsonMapper;
+      return this;
+    }
+
+    /** For internal testing use only. */
+    FidoMetadataDownloaderBuilder payloadJsonMapper(
+        final Supplier<ObjectMapper> makePayloadJsonMapper) {
+      this.makePayloadJsonMapper = makePayloadJsonMapper;
       return this;
     }
   }
@@ -849,47 +922,71 @@ public final class FidoMetadataDownloader {
 
     try {
       log.debug("Attempting to download new BLOB...");
-      final ByteArray downloadedBytes = download(blobUrl);
-      final MetadataBLOB downloadedBlob = parseAndVerifyBlob(downloadedBytes, trustRoot);
-      log.debug("New BLOB downloaded.");
+      final DownloadResult downloadResult =
+          download(
+              blobUrl,
+              // This should ideally use the value of the ETag response header from when the cached
+              // BLOB was downloaded, but we don't have anywhere to store that without changing the
+              // format of the cache serialization. This is good enough as the MDS explicitly
+              // specifies that the ETag is set to the "no" of the BLOB.
+              cached.map(cachedBlob -> String.format("%d", cachedBlob.getPayload().getNo())));
+      if (downloadResult.isNotModified()) {
+        log.debug("Remote BLOB not modified - using cached BLOB.");
+        return cached;
 
-      if (cached.isPresent()) {
-        log.debug("Cached BLOB exists - checking if new BLOB has a higher \"no\"...");
-        if (downloadedBlob.getPayload().getNo() <= cached.get().getPayload().getNo()) {
-          log.debug("New BLOB does not have a higher \"no\" - using cached BLOB instead.");
-          return cached;
+      } else {
+        ByteArray downloadedBytes = downloadResult.getContent();
+        final MetadataBLOB downloadedBlob = parseAndVerifyBlob(downloadedBytes, trustRoot);
+        log.debug("New BLOB downloaded.");
+
+        if (cached.isPresent()) {
+          log.debug("Cached BLOB exists - checking if new BLOB has a higher \"no\"...");
+          if (downloadedBlob.getPayload().getNo() <= cached.get().getPayload().getNo()) {
+            log.debug("New BLOB does not have a higher \"no\" - using cached BLOB instead.");
+            return cached;
+          }
+          log.debug("New BLOB has a higher \"no\" - proceeding with new BLOB.");
         }
-        log.debug("New BLOB has a higher \"no\" - proceeding with new BLOB.");
-      }
 
-      log.debug("Checking legalHeader in new BLOB...");
-      if (!expectedLegalHeaders.contains(downloadedBlob.getPayload().getLegalHeader())) {
-        throw new UnexpectedLegalHeader(cached.orElse(null), downloadedBlob);
-      }
-
-      log.debug("Writing new BLOB to cache...");
-      if (blobCacheFile != null) {
-        try (FileOutputStream f = new FileOutputStream(blobCacheFile)) {
-          f.write(downloadedBytes.getBytes());
+        log.debug("Checking legalHeader in new BLOB...");
+        if (!expectedLegalHeaders.contains(downloadedBlob.getPayload().getLegalHeader())) {
+          throw new UnexpectedLegalHeader(cached.orElse(null), downloadedBlob);
         }
-      }
 
-      if (blobCacheConsumer != null) {
-        blobCacheConsumer.accept(downloadedBytes);
-      }
+        log.debug("Writing new BLOB to cache...");
+        if (blobCacheFile != null) {
+          try (FileOutputStream f = new FileOutputStream(blobCacheFile)) {
+            f.write(downloadedBytes.getBytes());
+          }
+        }
 
-      return Optional.of(downloadedBlob);
+        if (blobCacheConsumer != null) {
+          blobCacheConsumer.accept(downloadedBytes);
+        }
+
+        return Optional.of(downloadedBlob);
+      }
     } catch (FidoMetadataDownloaderException e) {
       if (e.getReason() == Reason.BAD_SIGNATURE && cached.isPresent()) {
-        log.warn("New BLOB has bad signature - falling back to cached BLOB.");
-        return cached;
+        switch (cachePolicy.apply(e)) {
+          case USE_CACHED:
+            log.warn("New BLOB has bad signature - falling back to cached BLOB.");
+            return cached;
+          default:
+            throw e;
+        }
       } else {
         throw e;
       }
     } catch (Exception e) {
       if (cached.isPresent()) {
-        log.warn("Failed to download new BLOB - falling back to cached BLOB.", e);
-        return cached;
+        switch (cachePolicy.apply(e)) {
+          case USE_CACHED:
+            log.warn("Failed to download new BLOB - falling back to cached BLOB.", e);
+            return cached;
+          default:
+            throw e;
+        }
       } else {
         throw e;
       }
@@ -1021,7 +1118,7 @@ public final class FidoMetadataDownloader {
         });
   }
 
-  private Optional<ByteArray> readCacheFile(File cacheFile) throws IOException {
+  Optional<ByteArray> readCacheFile(File cacheFile) throws IOException {
     if (cacheFile.exists() && cacheFile.canRead() && cacheFile.isFile()) {
       try (FileInputStream f = new FileInputStream(cacheFile)) {
         return Optional.of(readAll(f));
@@ -1035,6 +1132,18 @@ public final class FidoMetadataDownloader {
   }
 
   private ByteArray download(URL url) throws IOException {
+    final DownloadResult downloadResult = download(url, Optional.empty());
+    if (downloadResult.isOk()) {
+      return downloadResult.getContent();
+    } else {
+      final String msg =
+          "download(URL, Optional.empty()) returned non-OK success response. This should be impossible, please file a bug report.";
+      log.error(msg);
+      throw new RuntimeException(msg);
+    }
+  }
+
+  private DownloadResult download(URL url, Optional<String> etag) throws IOException {
     URLConnection conn = url.openConnection();
 
     if (conn instanceof HttpsURLConnection) {
@@ -1055,9 +1164,43 @@ public final class FidoMetadataDownloader {
         }
       }
       httpsConn.setRequestMethod("GET");
+      etag.ifPresent(
+          et -> {
+            httpsConn.addRequestProperty("If-None-Match", String.format("\"%s\"", et));
+          });
+
+      if (httpsConn.getResponseCode() != HttpsURLConnection.HTTP_OK) {
+        switch (httpsConn.getResponseCode()) {
+          case 304: // Not Modified
+            log.debug("Received 304 Not Modified response to download request: {}", url);
+            return DownloadResult.notModified();
+        }
+
+        log.warn(
+            "Received non-200 status: {} to download request: {}",
+            httpsConn.getResponseCode(),
+            url);
+
+        // As of 2026-05-05, FIDO MDS returns an ETag header even with 429 Too Many Requests status.
+        // We might as well use it when present, even when the status is technically a failure.
+        final String responseEtag = httpsConn.getHeaderField("ETag");
+        if (responseEtag != null) {
+          log.debug("Response ETag: {}", responseEtag);
+          if (etag.map(
+                  et ->
+                      // ETag header value should be wrapped with double quotes (`etag: "243"`), but
+                      // FIDO MDS returns it like: `etag: 243`. Try both in case that changes in the
+                      // future.
+                      et.equals(responseEtag) || String.format("\"%s\"", et).equals(responseEtag))
+              .orElse(false)) {
+            log.debug("Response ETag matches local ETag - interpreting as not modified.");
+            return DownloadResult.notModified();
+          }
+        }
+      }
     }
 
-    return readAll(conn.getInputStream());
+    return DownloadResult.ok(readAll(conn.getInputStream()));
   }
 
   private MetadataBLOB parseAndVerifyBlob(ByteArray jwt, X509Certificate trustRootCertificate)
@@ -1145,23 +1288,32 @@ public final class FidoMetadataDownloader {
     return parseResult.blob;
   }
 
-  static ParseResult parseBlob(ByteArray jwt) throws IOException, Base64UrlException {
+  ParseResult parseBlob(ByteArray jwt) throws IOException, Base64UrlException {
     Scanner s = new Scanner(new ByteArrayInputStream(jwt.getBytes())).useDelimiter("\\.");
     final ByteArray jwtHeader = ByteArray.fromBase64Url(s.next());
     final ByteArray jwtPayload = ByteArray.fromBase64Url(s.next());
     final ByteArray jwtSignature = ByteArray.fromBase64Url(s.next());
 
     final ObjectMapper headerJsonMapper =
-        JacksonCodecs.json().setBase64Variant(Base64Variants.MIME_NO_LINEFEEDS);
+        makeHeaderJsonMapper.get().setBase64Variant(Base64Variants.MIME_NO_LINEFEEDS);
 
     return new ParseResult(
         new MetadataBLOB(
             headerJsonMapper.readValue(jwtHeader.getBytes(), MetadataBLOBHeader.class),
-            JacksonCodecs.jsonWithDefaultEnums()
+            makePayloadJsonMapper
+                .get()
                 .readValue(jwtPayload.getBytes(), MetadataBLOBPayload.class)),
         jwtHeader,
         jwtPayload,
         jwtSignature);
+  }
+
+  static ObjectMapper defaultHeaderJsonMapper() {
+    return JacksonCodecs.json();
+  }
+
+  static ObjectMapper defaultPayloadJsonMapper() {
+    return JacksonCodecs.jsonWithDefaultEnums();
   }
 
   private static ByteArray readAll(InputStream is) throws IOException {
@@ -1284,5 +1436,41 @@ public final class FidoMetadataDownloader {
       return Optional.of(
           CertStore.getInstance("Collection", new CollectionCertStoreParameters(crldpCrls)));
     }
+  }
+
+  @Value
+  @AllArgsConstructor(access = AccessLevel.PRIVATE)
+  private static class DownloadResult {
+    private boolean notModified;
+    private Optional<ByteArray> content;
+
+    static DownloadResult notModified() {
+      return new DownloadResult(true, Optional.empty());
+    }
+
+    static DownloadResult ok(@NonNull ByteArray content) {
+      return new DownloadResult(false, Optional.of(content));
+    }
+
+    ByteArray getContent() {
+      return content.get();
+    }
+
+    boolean isOk() {
+      return content.isPresent();
+    }
+  }
+
+  /**
+   * Values for the {@link FidoMetadataDownloaderBuilder#cachePolicy(Function)} argument function to
+   * return to express how {@link #refreshBlob()} and {@link #loadCachedBlob()} should behave when a
+   * BLOB download fails.
+   */
+  public enum CachePolicyDecision {
+    /** Recover by returning the cached BLOB as a successful result. */
+    USE_CACHED,
+
+    /** Propagate the failure by re-throwing the exception. */
+    THROW;
   }
 }

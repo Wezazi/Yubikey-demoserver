@@ -57,6 +57,7 @@ public interface AttestationTrustSource {
    *     an empty result. Implementations MAY reuse the same result object, or parts of it, for
    *     multiple calls of this method, even with different arguments, but MUST return an empty set
    *     of trust roots for authenticators that should not be trusted.
+   * @since 2.0.0
    */
   TrustRootsResult findTrustRoots(
       List<X509Certificate> attestationCertificateChain, Optional<ByteArray> aaguid);
@@ -77,6 +78,8 @@ public interface AttestationTrustSource {
    *   <li>define a policy tree validator for the PKIX policy tree result - see {@link
    *       TrustRootsResultBuilder#policyTreeValidator(Predicate) policyTreeValidator(Predicate)}.
    * </ul>
+   *
+   * @since 2.0.0
    */
   @Value
   @Builder(toBuilder = true)
@@ -86,6 +89,8 @@ public interface AttestationTrustSource {
      * A set of attestation root certificates trusted to certify the relevant attestation statement.
      * If the attestation statement is not trusted, or if no trust roots were found, this should be
      * an empty set.
+     *
+     * @since 2.0.0
      */
     @NonNull private final Set<X509Certificate> trustRoots;
 
@@ -99,6 +104,8 @@ public interface AttestationTrustSource {
      * trustRoots}.
      *
      * <p>The default is <code>null</code>.
+     *
+     * @since 2.0.0
      */
     @Builder.Default private final CertStore certStore = null;
 
@@ -106,6 +113,8 @@ public interface AttestationTrustSource {
      * Whether certificate revocation should be checked during certificate path validation.
      *
      * <p>The default is <code>true</code>.
+     *
+     * @since 2.0.0
      */
     @Builder.Default private final boolean enableRevocationChecking = true;
 
@@ -129,6 +138,8 @@ public interface AttestationTrustSource {
      * Predicate}.
      *
      * <p>The default is <code>null</code>.
+     *
+     * @since 2.1.0
      */
     @Builder.Default private final Predicate<PolicyNode> policyTreeValidator = null;
 
@@ -153,6 +164,8 @@ public interface AttestationTrustSource {
      * trustRoots}.
      *
      * <p>The default is <code>null</code>.
+     *
+     * @since 2.0.0
      */
     public Optional<CertStore> getCertStore() {
       return Optional.ofNullable(certStore);
@@ -178,6 +191,8 @@ public interface AttestationTrustSource {
      * Predicate}.
      *
      * <p>The default is <code>null</code>.
+     *
+     * @since 2.1.0
      */
     public Optional<Predicate<PolicyNode>> getPolicyTreeValidator() {
       return Optional.ofNullable(policyTreeValidator);
@@ -193,6 +208,8 @@ public interface AttestationTrustSource {
          * A set of attestation root certificates trusted to certify the relevant attestation
          * statement. If the attestation statement is not trusted, or if no trust roots were found,
          * this should be an empty set.
+         *
+         * @since 2.0.0
          */
         public TrustRootsResultBuilder trustRoots(@NonNull Set<X509Certificate> trustRoots) {
           return new TrustRootsResultBuilder().trustRoots(trustRoots);
@@ -203,6 +220,8 @@ public interface AttestationTrustSource {
        * A set of attestation root certificates trusted to certify the relevant attestation
        * statement. If the attestation statement is not trusted, or if no trust roots were found,
        * this should be an empty set.
+       *
+       * @since 2.0.0
        */
       // TODO: Let this auto-generate (investigate why Lombok fails to copy javadoc)
       public AttestationTrustSource.TrustRootsResult.TrustRootsResultBuilder trustRoots(
@@ -224,6 +243,8 @@ public interface AttestationTrustSource {
        * TrustRootsResultBuilder#trustRoots(Set) trustRoots}.
        *
        * <p>The default is <code>null</code>.
+       *
+       * @since 2.0.0
        */
       // TODO: Let this auto-generate (investigate why Lombok fails to copy javadoc)
       public AttestationTrustSource.TrustRootsResult.TrustRootsResultBuilder certStore(
@@ -237,6 +258,8 @@ public interface AttestationTrustSource {
        * Whether certificate revocation should be checked during certificate path validation.
        *
        * <p>The default is <code>true</code>.
+       *
+       * @since 2.0.0
        */
       // TODO: Let this auto-generate (investigate why Lombok fails to copy javadoc)
       public AttestationTrustSource.TrustRootsResult.TrustRootsResultBuilder
@@ -267,6 +290,8 @@ public interface AttestationTrustSource {
        * Predicate}.
        *
        * <p>The default is <code>null</code>.
+       *
+       * @since 2.1.0
        */
       // TODO: Let this auto-generate (investigate why Lombok fails to copy javadoc)
       public AttestationTrustSource.TrustRootsResult.TrustRootsResultBuilder policyTreeValidator(
@@ -281,6 +306,8 @@ public interface AttestationTrustSource {
      * A set of attestation root certificates trusted to certify the relevant attestation statement.
      * If the attestation statement is not trusted, or if no trust roots were found, this should be
      * an empty set.
+     *
+     * @since 2.0.0
      */
     // TODO: Let this auto-generate (investigate why Lombok fails to copy javadoc)
     @NonNull

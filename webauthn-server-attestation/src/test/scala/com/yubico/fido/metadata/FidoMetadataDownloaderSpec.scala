@@ -2,6 +2,8 @@ package com.yubico.fido.metadata
 
 import com.fasterxml.jackson.databind.node.IntNode
 import com.fasterxml.jackson.databind.node.ObjectNode
+import com.yubico.fido.metadata.FidoMetadataDownloader.CachePolicyDecision
+import com.yubico.fido.metadata.FidoMetadataDownloader.FidoMetadataDownloaderBuilder
 import com.yubico.fido.metadata.FidoMetadataDownloaderException.Reason
 import com.yubico.internal.util.BinaryUtil
 import com.yubico.internal.util.JacksonCodecs
@@ -30,6 +32,7 @@ import org.scalatestplus.junit.JUnitRunner
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.security.DigestException
@@ -52,6 +55,7 @@ import javax.servlet.http.HttpServletResponse
 import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.jdk.CollectionConverters.SeqHasAsJava
 import scala.jdk.CollectionConverters.SetHasAsJava
+import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
@@ -219,17 +223,19 @@ class FidoMetadataDownloaderSpec
   private def makeHttpServer(
       path: String,
       response: String,
+      inspectRequest: HttpServletRequest => Any = _ => {},
   ): (Server, String, X509Certificate) =
-    makeHttpServer(
-      Map(path -> (200, response.getBytes(StandardCharsets.UTF_8)))
-    )
+    makeHttpServer(Map(path -> (request => {
+      inspectRequest(request)
+      (200, response.getBytes(StandardCharsets.UTF_8))
+    })))
   private def makeHttpServer(
       path: String,
       response: Array[Byte],
   ): (Server, String, X509Certificate) =
-    makeHttpServer(Map(path -> (200, response)))
+    makeHttpServer(Map(path -> (_ => (200, response))))
   private def makeHttpServer(
-      responses: Map[String, (Int, Array[Byte])]
+      responses: Map[String, HttpServletRequest => (Int, Array[Byte])]
   ): (Server, String, X509Certificate) = {
     val tlsKey = TestAuthenticator.generateEcKeypair()
     val tlsCert = TestAuthenticator.buildCertificate(
@@ -271,8 +277,10 @@ class FidoMetadataDownloaderSpec
           request: HttpServletRequest,
           response: HttpServletResponse,
       ): Unit = {
+
         responses.get(target) match {
-          case Some((status, responseBody)) => {
+          case Some(processRequest) => {
+            val (status, responseBody) = processRequest(request)
             response.getOutputStream.write(responseBody)
             response.setStatus(status)
           }
@@ -1086,7 +1094,7 @@ class FidoMetadataDownloaderSpec
           blob.getNo should equal(blobNo)
         }
 
-        it("The cache is used if the BLOB download fails.") {
+        describe("The cache is used if the BLOB download fails") {
           val oldBlobNo = 1
           val newBlobNo = 2
 
@@ -1116,17 +1124,25 @@ class FidoMetadataDownloaderSpec
             )
           )
 
-          val (server, serverUrl, httpsCert) =
-            makeHttpServer(
-              Map(
-                "/blob.jwt" -> (HttpStatus.TOO_MANY_REQUESTS_429, newBlobJwt
-                  .getBytes(StandardCharsets.UTF_8))
+          def test[T](
+              configure: FidoMetadataDownloaderBuilder => T =
+                (_: FidoMetadataDownloaderBuilder) => {}
+          ): MetadataBLOBPayload = {
+            val (server, serverUrl, httpsCert) =
+              makeHttpServer(
+                Map(
+                  "/blob.jwt" -> (_ =>
+                    (
+                      HttpStatus.TOO_MANY_REQUESTS_429,
+                      newBlobJwt
+                        .getBytes(StandardCharsets.UTF_8),
+                    )
+                  )
+                )
               )
-            )
-          startServer(server)
+            startServer(server)
 
-          val blob = load(
-            FidoMetadataDownloader
+            val builder = FidoMetadataDownloader
               .builder()
               .expectLegalHeader(
                 "Kom ihåg att du aldrig får snyta dig i mattan!"
@@ -1143,10 +1159,39 @@ class FidoMetadataDownloaderSpec
               .clock(Clock.fixed(CertValidFrom, ZoneOffset.UTC))
               .useCrls(crls.asJava)
               .trustHttpsCerts(httpsCert)
-              .build()
-          ).getPayload
-          blob should not be null
-          blob.getNo should equal(oldBlobNo)
+            configure(builder)
+            load(builder.build()).getPayload
+          }
+
+          it("with the default settings.") {
+            val blob = test()
+            blob should not be null
+            blob.getNo should equal(oldBlobNo)
+          }
+
+          it("and the cache policy allows it.") {
+            val blob = test(builder => {
+              builder.cachePolicy(_ => CachePolicyDecision.USE_CACHED)
+            })
+            blob should not be null
+            blob.getNo should equal(oldBlobNo)
+          }
+
+          it("unless the cache policy decides to re-throw.") {
+            val blob = Try(test(builder => {
+              builder.cachePolicy(_ => CachePolicyDecision.THROW)
+            }))
+            blob shouldBe a[Failure[_]]
+            blob.failed.get shouldBe an[IOException]
+          }
+
+          it("unless the cache policy returns null.") {
+            val blob = Try(test(builder => {
+              builder.cachePolicy(_ => null)
+            }))
+            blob shouldBe a[Failure[_]]
+            blob.failed.get shouldBe a[NullPointerException]
+          }
         }
       }
 
@@ -1181,10 +1226,17 @@ class FidoMetadataDownloaderSpec
             val (server, _, httpsCert) =
               makeHttpServer(
                 Map(
-                  "/chain.pem" -> (200, certChainPem.getBytes(
-                    StandardCharsets.UTF_8
-                  )),
-                  "/blob.jwt" -> (200, blobJwt.getBytes(StandardCharsets.UTF_8)),
+                  "/chain.pem" -> (_ =>
+                    (
+                      200,
+                      certChainPem.getBytes(
+                        StandardCharsets.UTF_8
+                      ),
+                    )
+                  ),
+                  "/blob.jwt" -> (_ =>
+                    (200, blobJwt.getBytes(StandardCharsets.UTF_8))
+                  ),
                 )
               )
             startServer(server)
@@ -1790,7 +1842,7 @@ class FidoMetadataDownloaderSpec
           blob.getNo should equal(oldBlobNo)
         }
 
-        it("A newly downloaded BLOB is disregarded if it has an invalid signature but the cached one has a valid signature.") {
+        describe("A newly downloaded BLOB is disregarded if it has an invalid signature but the cached one has a valid signature") {
           val oldBlobNo = 1
           val newBlobNo = 2
 
@@ -1842,32 +1894,70 @@ class FidoMetadataDownloaderSpec
             )
             .mkString(".")
 
-          val (server, serverUrl, httpsCert) =
-            makeHttpServer("/blob.jwt", badNewBlobJwt)
-          startServer(server)
+          def test[T](
+              configure: FidoMetadataDownloaderBuilder => T =
+                (_: FidoMetadataDownloaderBuilder) => {}
+          ): MetadataBLOBPayload = {
+            val (server, serverUrl, httpsCert) =
+              makeHttpServer("/blob.jwt", badNewBlobJwt)
+            startServer(server)
 
-          val blob = load(
-            FidoMetadataDownloader
-              .builder()
-              .expectLegalHeader(
-                "Kom ihåg att du aldrig får snyta dig i mattan!"
+            val builder =
+              FidoMetadataDownloader
+                .builder()
+                .expectLegalHeader(
+                  "Kom ihåg att du aldrig får snyta dig i mattan!"
+                )
+                .useTrustRoot(trustRootCert)
+                .downloadBlob(new URL(s"${serverUrl}/blob.jwt"))
+                .useBlobCache(
+                  () =>
+                    Optional.of(
+                      new ByteArray(oldBlobJwt.getBytes(StandardCharsets.UTF_8))
+                    ),
+                  _ => {},
+                )
+                .clock(Clock.fixed(CertValidFrom, ZoneOffset.UTC))
+                .useCrls(crls.asJava)
+                .trustHttpsCerts(httpsCert)
+            configure(builder)
+            load(builder.build()).getPayload
+          }
+
+          it("under the default settings.") {
+            val blob = test()
+            blob should not be null
+            blob.getNo should equal(oldBlobNo)
+          }
+
+          it("if the cache policy allows falling back to the cache.") {
+            val blob = test(builder => {
+              builder.cachePolicy((_: Exception) =>
+                CachePolicyDecision.USE_CACHED
               )
-              .useTrustRoot(trustRootCert)
-              .downloadBlob(new URL(s"${serverUrl}/blob.jwt"))
-              .useBlobCache(
-                () =>
-                  Optional.of(
-                    new ByteArray(oldBlobJwt.getBytes(StandardCharsets.UTF_8))
-                  ),
-                _ => {},
-              )
-              .clock(Clock.fixed(CertValidFrom, ZoneOffset.UTC))
-              .useCrls(crls.asJava)
-              .trustHttpsCerts(httpsCert)
-              .build()
-          ).getPayload
-          blob should not be null
-          blob.getNo should equal(oldBlobNo)
+            })
+            blob should not be null
+            blob.getNo should equal(oldBlobNo)
+          }
+
+          it("unless the cache policy decides to re-throw.") {
+            val blob = Try(test(builder => {
+              builder.cachePolicy((_: Exception) => CachePolicyDecision.THROW)
+            }))
+            blob shouldBe a[Failure[_]]
+            blob.failed.get shouldBe a[FidoMetadataDownloaderException]
+            blob.failed.get
+              .asInstanceOf[FidoMetadataDownloaderException]
+              .getReason should be(Reason.BAD_SIGNATURE)
+          }
+
+          it("unless the cache policy returns null.") {
+            val blob = Try(test(builder => {
+              builder.cachePolicy((_: Exception) => null)
+            }))
+            blob shouldBe a[Failure[_]]
+            blob.failed.get shouldBe a[NullPointerException]
+          }
         }
 
         it("If verifyDownloadsOnly is not set, a cached BLOB may expire.") {
@@ -2289,6 +2379,123 @@ class FidoMetadataDownloaderSpec
       blob should not be null
       blob.getNo should equal(newBlobNo)
     }
+
+    withEachLoadMethod(load => {
+      describe(
+        """The download request sends the If-None-Match header set to the "no" value of the cached BLOB"""
+      ) {
+        val oldBlobExpires = CertValidFrom.plus(10, ChronoUnit.DAYS)
+        val newBlobExpires = oldBlobExpires.plus(5, ChronoUnit.DAYS)
+
+        val oldBlobJwt =
+          makeBlob(
+            List(blobCert),
+            blobKeypair,
+            oldBlobExpires.atOffset(ZoneOffset.UTC).toLocalDate,
+            no = oldBlobNo,
+          )
+        val newBlobJwt =
+          makeBlob(
+            List(blobCert),
+            blobKeypair,
+            newBlobExpires.atOffset(ZoneOffset.UTC).toLocalDate,
+            no = newBlobNo,
+          )
+
+        def downloader(
+            currentTime: Instant,
+            serverUrl: String,
+            serverCert: X509Certificate,
+        ): FidoMetadataDownloader = {
+          FidoMetadataDownloader
+            .builder()
+            .expectLegalHeader(
+              "Kom ihåg att du aldrig får snyta dig i mattan!"
+            )
+            .useTrustRoot(trustRootCert)
+            .downloadBlob(new URL(s"${serverUrl}/blob.jwt"))
+            .useBlobCache(
+              () =>
+                Optional.of(
+                  new ByteArray(oldBlobJwt.getBytes(StandardCharsets.UTF_8))
+                ),
+              _ => {},
+            )
+            .clock(Clock.fixed(currentTime, ZoneOffset.UTC))
+            .useCrls(crls.asJava)
+            .trustHttpsCerts(serverCert)
+            .build()
+        }
+
+        /** Needed to work around some strange scalafmt issues */
+        def toQuoted(i: Int): String = String.join("", "\"", i.toString, "\"")
+
+        it("when the cached BLOB is up to date.") {
+          var requestRan = false
+          var requestSucceeded = false
+          val (server, serverUrl, serverCert) =
+            makeHttpServer(
+              "/blob.jwt",
+              newBlobJwt,
+              request => {
+                requestRan = true
+                request.getHeader("If-None-Match") should equal(
+                  toQuoted(oldBlobNo)
+                )
+                // The above assertion won't directly cause the test to fail, since it runs in the server context.
+                requestSucceeded = true
+              },
+            )
+          startServer(server)
+
+          val blob =
+            load(
+              downloader(
+                oldBlobExpires.minus(1, ChronoUnit.DAYS),
+                serverUrl,
+                serverCert,
+              )
+            ).getPayload
+          blob should not be null
+          if (requestRan) {
+            blob.getNo should equal(newBlobNo)
+            requestSucceeded should be(true)
+          } else {
+            blob.getNo should equal(oldBlobNo)
+          }
+        }
+
+        it("when the cached BLOB is expired.") {
+          var requestSucceeded = false
+          val (server, serverUrl, serverCert) =
+            makeHttpServer(
+              "/blob.jwt",
+              newBlobJwt,
+              request => {
+                request.getHeader("If-None-Match") should equal(
+                  toQuoted(oldBlobNo)
+                )
+                // The above assertion won't directly cause the test to fail, since it runs in the server context.
+                requestSucceeded = true
+              },
+            )
+          startServer(server)
+
+          val blob =
+            load(
+              downloader(
+                oldBlobExpires.plus(1, ChronoUnit.DAYS),
+                serverUrl,
+                serverCert,
+              )
+            ).getPayload
+          blob should not be null
+          blob.getNo should equal(newBlobNo)
+          requestSucceeded should be(true)
+        }
+
+      }
+    })
   }
 
 }

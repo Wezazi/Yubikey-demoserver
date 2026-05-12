@@ -21,6 +21,11 @@ public class CollectionUtil {
     return Collections.unmodifiableMap(new HashMap<>(m));
   }
 
+  /** Alias of <code>s == null ? Collections.emptyMap() : CollectionUtil.immutableMap(s)</code>. */
+  public static <K, V> Map<K, V> immutableMapOrEmpty(Map<K, V> s) {
+    return s == null ? Collections.emptyMap() : immutableMap(s);
+  }
+
   /**
    * Make an unmodifiable shallow copy of the argument.
    *

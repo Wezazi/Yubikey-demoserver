@@ -1,5 +1,6 @@
 package com.yubico.fido.metadata;
 
+import com.fasterxml.jackson.annotation.JsonEnumDefaultValue;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
@@ -14,6 +15,14 @@ import com.fasterxml.jackson.annotation.JsonValue;
  *     Registry of Predefined Values §3.7 Authenticator Attestation Types</a>
  */
 public enum AuthenticatorAttestationType {
+
+  /**
+   * (NOT DEFINED IN SPEC) Placeholder for any unknown {@link AuthenticatorAttestationType} value.
+   *
+   * @since 2.9.0
+   */
+  @JsonEnumDefaultValue
+  UNKNOWN(0, "UNKNOWN"),
 
   /**
    * Indicates full basic attestation, based on an attestation private key shared among a class of

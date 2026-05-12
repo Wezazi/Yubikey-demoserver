@@ -1,5 +1,6 @@
 package com.yubico.fido.metadata;
 
+import com.fasterxml.jackson.annotation.JsonEnumDefaultValue;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
@@ -17,6 +18,15 @@ import com.fasterxml.jackson.annotation.JsonValue;
  *     Registry of Predefined Values §3.5 Transaction Confirmation Display Types</a>
  */
 public enum TransactionConfirmationDisplayType {
+
+  /**
+   * (NOT DEFINED IN SPEC) Placeholder for any unknown {@link TransactionConfirmationDisplayType}
+   * value.
+   *
+   * @since 2.9.0
+   */
+  @JsonEnumDefaultValue
+  UNKNOWN(0, "UNKNOWN"),
 
   /**
    * @see <a

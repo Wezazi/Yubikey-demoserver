@@ -265,12 +265,14 @@ object Generators {
     for {
       selfAttestedFRR <- arbitrary[Option[Double]]
       selfAttestedFAR <- arbitrary[Option[Double]]
+      iAPARThreshold <- arbitrary[Option[Double]]
       maxTemplates <- arbitrary[Option[Int]]
       maxRetries <- arbitrary[Option[Int]]
       blockSlowdown <- arbitrary[Option[Int]]
     } yield new BiometricAccuracyDescriptor(
       selfAttestedFRR.map(Double.box).orNull,
       selfAttestedFAR.map(Double.box).orNull,
+      iAPARThreshold.map(Double.box).orNull,
       maxTemplates.map(Integer.valueOf).orNull,
       maxRetries.map(Integer.valueOf).orNull,
       blockSlowdown.map(Integer.valueOf).orNull,

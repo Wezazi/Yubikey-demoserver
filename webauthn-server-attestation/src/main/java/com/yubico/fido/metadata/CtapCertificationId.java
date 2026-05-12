@@ -1,5 +1,6 @@
 package com.yubico.fido.metadata;
 
+import com.fasterxml.jackson.annotation.JsonEnumDefaultValue;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
@@ -14,6 +15,14 @@ import com.fasterxml.jackson.annotation.JsonValue;
  *     to Authenticator Protocol (CTAP) §7.3. Authenticator Certifications</a>
  */
 public enum CtapCertificationId {
+
+  /**
+   * (NOT DEFINED IN SPEC) Placeholder for any unknown {@link CtapCertificationId} value.
+   *
+   * @since 2.9.0
+   */
+  @JsonEnumDefaultValue
+  UNKNOWN("UNKNOWN"),
 
   /**
    * @see <a
