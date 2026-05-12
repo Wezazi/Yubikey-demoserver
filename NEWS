@@ -2,6 +2,16 @@
 
 `webauthn-server-core`:
 
+Security fixes:
+
+* Fixed issue where `RelyingParty.finishAssertion` and
+  `RelyingPartyV2.finishAssertion` could return a successful authentication
+  result even though the authenticated credential is owned by a different user
+  than `StartAssertionOptions.username`. For details see CVE-[TBD] or
+  YSA-2026-02: https://www.yubico.com/support/security-advisories/ysa-2026-02/
+ ** This fix is forward-ported from version 2.8.2 since the issue is also
+    present in pre-release 2.9.0-alpha1.
+
 Fixes:
 
 * Added `@since` tags to `AttestationTrustSource` javadoc.
