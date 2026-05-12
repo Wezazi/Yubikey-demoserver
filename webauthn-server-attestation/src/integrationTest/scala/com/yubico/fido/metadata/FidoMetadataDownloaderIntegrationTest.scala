@@ -13,8 +13,6 @@ import org.scalatest.tags.Slow
 import org.scalatestplus.junit.JUnitRunner
 
 import scala.jdk.CollectionConverters.ListHasAsScala
-import scala.util.Success
-import scala.util.Try
 
 @Slow
 @Network
@@ -28,16 +26,15 @@ class FidoMetadataDownloaderIntegrationTest
     val downloader = cachedDefaultSettingsDownloader.build()
 
     it("downloads and verifies the root cert and BLOB successfully.") {
-      val blob = Try(TestCaches.cacheSynchronized(downloader.loadCachedBlob))
-      blob shouldBe a[Success[_]]
-      blob.get should not be null
+      val blob = TestCaches.cacheSynchronized(downloader.loadCachedBlob)
+      blob should not be null
     }
 
     it(
       "does not encounter any CRLDistributionPoints entries in unknown format."
     ) {
-      val blob = Try(TestCaches.cacheSynchronized(downloader.loadCachedBlob))
-      blob shouldBe a[Success[_]]
+      val blob = TestCaches.cacheSynchronized(downloader.loadCachedBlob)
+      blob should not be null
       val trustRootCert =
         CertificateParser.parseDer(
           TestCaches.trustRootCache.get.getBytes
@@ -86,9 +83,8 @@ class FidoMetadataDownloaderIntegrationTest
       .build()
 
     it("downloads and parses the BLOB successfully.") {
-      val blob = Try(TestCaches.cacheSynchronized(downloader.loadCachedBlob))
-      blob shouldBe a[Success[_]]
-      blob.get should not be null
+      val blob = TestCaches.cacheSynchronized(downloader.loadCachedBlob)
+      blob should not be null
     }
   }
 
