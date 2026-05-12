@@ -62,7 +62,7 @@ val integrationTest = task<Test>("integrationTest") {
   classpath = sourceSets["integrationTest"].runtimeClasspath
   shouldRunAfter(tasks.test)
   val mdsCacheDir = project.layout.buildDirectory.dir("fido-mds-cache").get().asFile
-  mdsCacheDir.mkdir()
+  mdsCacheDir.mkdirs()
   environment("FIDO_MDS_CACHE_DIR", mdsCacheDir.absolutePath)
 }
 tasks["check"].dependsOn(integrationTest)
