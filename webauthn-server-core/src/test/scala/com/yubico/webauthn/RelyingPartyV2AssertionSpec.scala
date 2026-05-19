@@ -1159,7 +1159,7 @@ class RelyingPartyV2AssertionSpec
                     genCredentialIdAndAllowCredentials,
                     genUserIdentifiers,
                     genUserHandle,
-                    maxDiscardedFactor(20), // This helps the `whenever` clause below not make the test flaky
+                    maxDiscardedFactor(30), // This helps the `whenever` clause below not make the test flaky
                   ) {
                     case (
                           (credentialId, allowCredentials),
