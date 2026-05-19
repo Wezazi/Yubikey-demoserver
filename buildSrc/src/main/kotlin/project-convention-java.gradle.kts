@@ -14,3 +14,48 @@ tasks.withType(JavaCompile::class) {
         sourceCompatibility = "1.8"
     }
 }
+
+tasks.register<Test>("testJava8") {
+  testClassesDirs = tasks.named<Test>("test").get().testClassesDirs
+  classpath = tasks.named<Test>("test").get().classpath
+  javaLauncher.set(javaToolchains.launcherFor {
+    languageVersion.set(JavaLanguageVersion.of(8))
+  })
+  tasks["check"].dependsOn(this)
+}
+
+tasks.register<Test>("testJava11") {
+  testClassesDirs = tasks.named<Test>("test").get().testClassesDirs
+  classpath = tasks.named<Test>("test").get().classpath
+  javaLauncher.set(javaToolchains.launcherFor {
+    languageVersion.set(JavaLanguageVersion.of(11))
+  })
+  tasks["check"].dependsOn(this)
+}
+
+tasks.register<Test>("testJava17") {
+  testClassesDirs = tasks.named<Test>("test").get().testClassesDirs
+  classpath = tasks.named<Test>("test").get().classpath
+  javaLauncher.set(javaToolchains.launcherFor {
+    languageVersion.set(JavaLanguageVersion.of(17))
+  })
+  tasks["check"].dependsOn(this)
+}
+
+tasks.register<Test>("testJava21") {
+  testClassesDirs = tasks.named<Test>("test").get().testClassesDirs
+  classpath = tasks.named<Test>("test").get().classpath
+  javaLauncher.set(javaToolchains.launcherFor {
+    languageVersion.set(JavaLanguageVersion.of(21))
+  })
+  tasks["check"].dependsOn(this)
+}
+
+tasks.register<Test>("testJava25") {
+  testClassesDirs = tasks.named<Test>("test").get().testClassesDirs
+  classpath = tasks.named<Test>("test").get().classpath
+  javaLauncher.set(javaToolchains.launcherFor {
+    languageVersion.set(JavaLanguageVersion.of(25))
+  })
+  tasks["check"].dependsOn(this)
+}
