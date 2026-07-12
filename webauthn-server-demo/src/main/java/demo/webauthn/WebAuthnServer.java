@@ -24,6 +24,7 @@
 
 package demo.webauthn;
 
+import com.yubico.webauthn.data.UserVerificationRequirement;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.JsonSerializer;
@@ -256,6 +257,7 @@ public class WebAuthnServer {
                       .authenticatorSelection(
                           AuthenticatorSelectionCriteria.builder()
                               .residentKey(residentKeyRequirement)
+                              .userVerification(UserVerificationRequirement.DISCOURAGED)
                               .build())
                       .build()),
               Optional.of(sessions.createSession(registrationUserId.getId())));
@@ -432,7 +434,11 @@ public class WebAuthnServer {
       AssertionRequestWrapper request =
           new AssertionRequestWrapper(
               generateRandom(32),
-              rp.startAssertion(StartAssertionOptions.builder().username(username).build()));
+              rp.startAssertion(
+                  StartAssertionOptions.builder()
+                      .username(username)
+                      .userVerification(UserVerificationRequirement.DISCOURAGED)
+                      .build()));
 
       assertRequestStorage.put(request.getRequestId(), request);
 
